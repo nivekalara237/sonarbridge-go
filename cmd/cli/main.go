@@ -5,10 +5,13 @@ import (
 	"log"
 	"os"
 	"sonarbridge-go/configs"
+	"sonarbridge-go/internal/bootstrap"
+	"sonarbridge-go/internal/cli"
 )
 
-func main()  {
+func main() {
 	cfg := configs.Load()
+	app := bootstrap.NewApp(*cfg)
 
 	fmt.Println("The config are", cfg)
 
@@ -18,21 +21,9 @@ func main()  {
 		os.Exit(1)
 	}
 
-	args := os.Args
+	root := cli.NewRootCommand(app.Service)
 
-	switch args[1] {
-	case "analyze":
-		if len(args) != 4 {
-			log.Fatal("Usage: cli analyze <project> <branch>")
-		}
-
-		projectKey := args[2]
-		branch := args[3]
-
-		fmt.Println("We analyse for project", projectKey, "on", branch, "branch")
-		fmt.Println("Bye!")
-
-	default:
-		log.Fatalf("Unknown command: %s", args[1])
+	if err := root.Execute(); err != nil {
+		log.Fatal(err)
 	}
 }

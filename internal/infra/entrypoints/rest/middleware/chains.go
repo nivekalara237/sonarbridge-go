@@ -21,10 +21,10 @@ func (b *Builder) Add(m Middleware) *Builder {
 	return b
 }
 
-func (b *Builder) Build() http.Handler {
+func (b *Builder) Build() *http.Handler {
 	h := b.handler
 	for i := len(b.middlewares) - 1; i >= 0; i-- {
 		h = b.middlewares[i](h)
 	}
-	return h
+	return &h
 }

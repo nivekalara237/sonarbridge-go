@@ -9,6 +9,7 @@ import (
 	"sonarbridge-go/internal/core/domain"
 	"sonarbridge-go/internal/core/interactor"
 	"sonarbridge-go/internal/infra/utils"
+	"sonarbridge-go/internal/logging"
 	"strconv"
 )
 
@@ -16,6 +17,8 @@ type Service struct {
 	interactor.SonarInteractor
 	interactor.GitlabInteractor
 	interactor.ReportInteractor
+
+	Logger *logging.Logger
 }
 
 func (svc *Service) Execute(ctx context.Context, webhookData domain.SonarQubeWebhookPayload) (*domain.WebhookResponse, error) {

@@ -16,6 +16,7 @@ type CorsConfig struct {
 }
 
 type Config struct {
+	Env  string
 	Port string
 
 	SonarBaseUrl string
@@ -40,6 +41,7 @@ func Load() *Config {
 	allowCreds, _ := strconv.ParseBool(utils.GetEnvOrDefault("CORS_ALLOW_CREDENTIALS", "false"))
 
 	return &Config{
+		Env:           utils.GetEnvOrDefault("ENV", "dev"),
 		Port:          utils.GetEnvOrDefault("PORT", "3045"),
 		SonarBaseUrl:  utils.GetRequiredEnv("SONARQUBE_URL"),
 		SonarToken:    utils.GetRequiredEnv("SONARQUBE_TOKEN"),

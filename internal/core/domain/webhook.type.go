@@ -12,7 +12,7 @@ type SonarQubeWebhookPayload struct {
 
 type Project struct {
 	Key  string
-	Name *string
+	Name string
 }
 
 type GitLab struct {
