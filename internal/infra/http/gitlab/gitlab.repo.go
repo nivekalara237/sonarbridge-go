@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log"
 	"net/url"
 	"sonarbridge-go/configs"
@@ -18,12 +17,19 @@ import (
 
 type Interactor struct {
 	interactor.GitlabInteractor
+	config configs.Config
 }
 
-func createHttpClient(ciToken string) (*http.Client, error) {
-	cfg := configs.Load()
-	baseUrl := cfg.GitlabBaseUrl
-	token := cfg.GitlabToken
+func New(cfg configs.Config) *Interactor {
+	return &Interactor{
+		GitlabInteractor: (*Interactor)(nil),
+		config:           cfg,
+	}
+}
+
+func (inter *Interactor) createHttpClient(ciToken string) (*http.Client, error) {
+	baseUrl := inter.config.GitlabBaseUrl
+	token := inter.config.GitlabToken
 	if baseUrl == "" || token == "" {
 		return nil, errors.New("variable d'environnement GITLAB_API_URL ou GITLAB_TOKEN manquante")
 	}
@@ -35,7 +41,7 @@ func createHttpClient(ciToken string) (*http.Client, error) {
 
 func (inter *Interactor) CreateCommitStatus(ctx context.Context, projectId, sha, ciToken string, statusData domain.GitlabCommitStatus) (any, error) {
 
-	httpClient, err := createHttpClient(ciToken)
+	httpClient, err := inter.createHttpClient(ciToken)
 	if err != nil {
 		return nil, err
 	}
@@ -69,7 +75,7 @@ func (inter *Interactor) CreateCommitStatus(ctx context.Context, projectId, sha,
 
 func (inter *Interactor) CreateOrUpdateMergeRequestComment(ctx context.Context, projectId, mergeRequestId, comment, ciToken string) (*domain.GitLabNote, error) {
 
-	httpClient, err := createHttpClient(ciToken)
+	httpClient, err := inter.createHttpClient(ciToken)
 
 	if err != nil {
 		return nil, err
@@ -119,16 +125,12 @@ func (inter *Interactor) CreateOrUpdateMergeRequestComment(ctx context.Context, 
 
 	}
 
-	resp, xdd := createNewComment(ctx, httpClient, projectId, mergeRequestId, comment)
-	fmt.Println("**********************************")
-	fmt.Println(resp)
-	fmt.Println(xdd)
-	fmt.Println("**********************************")
+	resp, _ := createNewComment(ctx, httpClient, projectId, mergeRequestId, comment)
 	return toDomain(*resp), nil
 }
 
 func (inter *Interactor) GetMergeRequest(ctx context.Context, projectId, mergeRequestId, ciToken string) (*domain.GitLabMergeRequest, error) {
-	httpClient, err := createHttpClient(ciToken)
+	httpClient, err := inter.createHttpClient(ciToken)
 	if err != nil {
 		log.Println("Error creating httpclient")
 		return nil, err

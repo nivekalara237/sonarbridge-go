@@ -12,11 +12,17 @@ import (
 	"time"
 )
 
-type UseCase struct {
-	WebhookUseCase *usecase.Service
+type WebhookHandler struct {
+	service *usecase.Service
 }
 
-func (useCase *UseCase) Handler(writer http.ResponseWriter, request *http.Request) {
+func NewWebhookHandler(svc *usecase.Service) *WebhookHandler {
+	return &WebhookHandler{
+		service: svc,
+	}
+}
+
+func (useCase *WebhookHandler) Handler(writer http.ResponseWriter, request *http.Request) {
 	if request.Method != http.MethodPost {
 		http.Error(writer, "méthode non autorisée", http.StatusMethodNotAllowed)
 		return
@@ -44,7 +50,7 @@ func (useCase *UseCase) Handler(writer http.ResponseWriter, request *http.Reques
 	ctx, cancel := context.WithTimeout(request.Context(), 15*time.Second)
 	defer cancel()
 
-	response, err := useCase.WebhookUseCase.Execute(ctx, domain.SonarQubeWebhookPayload{
+	response, err := useCase.service.Execute(ctx, domain.SonarQubeWebhookPayload{
 		TaskID: &payload.TaskID,
 		Status: "",
 		SonarProject: domain.Project{

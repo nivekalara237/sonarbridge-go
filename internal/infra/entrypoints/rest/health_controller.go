@@ -1,0 +1,15 @@
+package rest
+
+import "net/http"
+
+type HealthHandler struct{}
+
+func NewHealthHandler() *HealthHandler {
+	return &HealthHandler{}
+}
+
+func (h *HealthHandler) GetZ(w http.ResponseWriter, r *http.Request) {
+	JSON(w, 200, map[string]string{
+		"status": "UP",
+	})
+}

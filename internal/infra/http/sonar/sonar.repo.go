@@ -14,14 +14,21 @@ import (
 
 type Interactor struct {
 	interactor.SonarInteractor
+	config configs.Config
+}
+
+func New(cfg configs.Config) *Interactor {
+	return &Interactor{
+		SonarInteractor: (*Interactor)(nil),
+		config:          cfg,
+	}
 }
 
 var _ interactor.SonarInteractor = (*Interactor)(nil)
 
-func createHttpClient() (*http.Client, error) {
-	cfg := configs.Load()
-	baseUrl := cfg.SonarBaseUrl
-	token := cfg.SonarToken
+func (inter *Interactor) createHttpClient() (*http.Client, error) {
+	baseUrl := inter.config.SonarBaseUrl
+	token := inter.config.SonarToken
 	if baseUrl == "" || token == "" {
 		return nil, errors.New("variable d'environnement SONARQUBE_URL ou SONARQUBE_TOKEN manquante")
 	}
@@ -30,14 +37,13 @@ func createHttpClient() (*http.Client, error) {
 
 func (inter *Interactor) GetTaskDetails(ctx context.Context, taskId string) (*domain.SonarTaskDetails, error) {
 
-	sonarClient, err := createHttpClient()
+	sonarClient, err := inter.createHttpClient()
 	if err != nil {
 		return nil, err
 	}
 	var response TaskResponse
 
 	if err0 := sonarClient.Get(ctx, "/ce/task", url.Values{"id": {taskId}}, &response); err0 != nil {
-		slog.Error(" xxxxxxxxxxxx ", err0.Error())
 		return nil, err0
 	}
 
@@ -68,7 +74,7 @@ func (inter *Interactor) GetAnalysisDetails(ctx context.Context, projectKey, bra
 		analysisId = task.AnalysisId
 	}
 
-	sonarClient, err := createHttpClient()
+	sonarClient, err := inter.createHttpClient()
 	if err != nil {
 		return nil, err
 	}
@@ -188,7 +194,7 @@ func (inter *Interactor) GetAnalysisDetails(ctx context.Context, projectKey, bra
 
 func (inter *Interactor) GetLatestAnalysis(ctx context.Context, projectKey, branch string) (*domain.AnalysisDetails, error) {
 
-	sonarClient, e := createHttpClient()
+	sonarClient, e := inter.createHttpClient()
 	if e != nil {
 		return nil, e
 	}
