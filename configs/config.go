@@ -18,6 +18,7 @@ type CorsConfig struct {
 type Config struct {
 	Env  string
 	Port string
+	Host string
 
 	SonarBaseUrl string
 	SonarToken   string
@@ -43,6 +44,7 @@ func Load() *Config {
 	return &Config{
 		Env:           utils.GetEnvOrDefault("ENV", "dev"),
 		Port:          utils.GetEnvOrDefault("PORT", "3045"),
+		Host:          utils.GetEnvOrDefault("HOST", ""),
 		SonarBaseUrl:  utils.GetRequiredEnv("SONARQUBE_URL"),
 		SonarToken:    utils.GetRequiredEnv("SONARQUBE_TOKEN"),
 		GitlabBaseUrl: utils.GetRequiredEnv("GITLAB_URL"),

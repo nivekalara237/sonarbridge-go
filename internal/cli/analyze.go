@@ -61,7 +61,6 @@ func NewAnalyzeCommand(svc *usecase.Service, cliCtx *Context) *cobra.Command {
 
 			if cliCtx.Verbose {
 				fmt.Println("Verbose enabled")
-
 			}
 			cliCtx.Output.Debug(cliCtx.Verbose, "")
 

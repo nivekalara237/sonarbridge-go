@@ -3,12 +3,13 @@ package rest
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"sonarbridge-go/internal/core/domain"
 	"sonarbridge-go/internal/core/usecase"
 	"sonarbridge-go/internal/infra/entrypoints/dto"
+	"sonarbridge-go/internal/infra/entrypoints/rest/httpx"
+	"sonarbridge-go/internal/logging"
 	"time"
 )
 
@@ -22,10 +23,9 @@ func NewWebhookHandler(svc *usecase.Service) *WebhookHandler {
 	}
 }
 
-func (useCase *WebhookHandler) Handler(writer http.ResponseWriter, request *http.Request) {
+func (useCase *WebhookHandler) Handler(writer http.ResponseWriter, request *http.Request) error {
 	if request.Method != http.MethodPost {
-		http.Error(writer, "méthode non autorisée", http.StatusMethodNotAllowed)
-		return
+		return httpx.ErrMethodNotAllowed
 	}
 
 	var payload dto.WebhookRequestDto
@@ -33,14 +33,13 @@ func (useCase *WebhookHandler) Handler(writer http.ResponseWriter, request *http
 	decoder.DisallowUnknownFields()
 
 	if err := decoder.Decode(&payload); err != nil {
-		slog.Error("payload invalide", "error", err)
-		http.Error(writer, "payload JSON invalide: "+err.Error(), http.StatusBadRequest)
-		return
+		logging.Error("payload invalide", "error", err)
+		return httpx.ErrBadRequest
 	}
+	logging.Info("payload", payload)
 
-	slog.Info("webhook reçu",
+	logging.Info("webhook reçu",
 		"project", payload.SonarProject.Key,
-		// "status", payload.Status,
 		"mrIID", payload.MergeRequest.IID,
 		"branch", payload.GitLab.Branch,
 	)
@@ -75,8 +74,8 @@ func (useCase *WebhookHandler) Handler(writer http.ResponseWriter, request *http
 	})
 	if err != nil {
 		slog.Error("erreur inattendue", err)
-		http.Error(writer, err.Error(), http.StatusInternalServerError)
-		return
+		// http.Error(writer, err.Error(), http.StatusInternalServerError)
+		return httpx.ErrInternal
 	}
 
 	if !response.Mergeable {
@@ -85,5 +84,7 @@ func (useCase *WebhookHandler) Handler(writer http.ResponseWriter, request *http
 		writer.WriteHeader(http.StatusOK)
 	}
 	writer.Header().Set("Content-Type", "application/json")
-	fmt.Fprintf(writer, `{"received":%t,"qualityGateStatus":"%s","mergeable":%t}`, response.Received, response.QualityGateStatus, response.Mergeable)
+	// fmt.Fprintf(writer, `{"received":%t,"qualityGateStatus":"%s","mergeable":%t}`, response.Received, response.QualityGateStatus, response.Mergeable)
+	httpx.WriteJSON(writer, 200, &response)
+	return nil
 }

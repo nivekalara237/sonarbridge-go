@@ -78,18 +78,12 @@ func (c *Client) Get(ctx context.Context, path string, params url.Values, out an
 
 	if response.StatusCode != http.StatusOK {
 		Body, _ := io.ReadAll(response.Body)
-		fmt.Println("=========================ERROR=========================")
-		fmt.Println(string(Body))
-		fmt.Println("==================================================")
 		return fmt.Errorf("%s a repondu %d: %s", path, response.StatusCode, string(Body))
 	}
 
 	decoder := json.NewDecoder(response.Body)
 	// decoder.DisallowUnknownFields()
 	if err5 := decoder.Decode(&out); err5 != nil {
-		fmt.Println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-		fmt.Println(err5)
-		fmt.Println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
 		return err5
 	}
 	return nil

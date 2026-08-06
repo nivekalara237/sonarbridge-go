@@ -4,13 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log"
 	"net/url"
 	"sonarbridge-go/configs"
 	"sonarbridge-go/internal/core/domain"
 	"sonarbridge-go/internal/core/interactor"
 	"sonarbridge-go/internal/infra/http"
 	"sonarbridge-go/internal/infra/utils"
+	"sonarbridge-go/internal/logging"
 	"strconv"
 	"strings"
 )
@@ -31,6 +31,7 @@ func (inter *Interactor) createHttpClient(ciToken string) (*http.Client, error) 
 	baseUrl := inter.config.GitlabBaseUrl
 	token := inter.config.GitlabToken
 	if baseUrl == "" || token == "" {
+		logging.Error("variable d'environnement GITLAB_API_URL ou GITLAB_TOKEN manquante")
 		return nil, errors.New("variable d'environnement GITLAB_API_URL ou GITLAB_TOKEN manquante")
 	}
 	if strings.TrimSpace(ciToken) != "" {
@@ -41,6 +42,7 @@ func (inter *Interactor) createHttpClient(ciToken string) (*http.Client, error) 
 
 func (inter *Interactor) CreateCommitStatus(ctx context.Context, projectId, sha, ciToken string, statusData domain.GitlabCommitStatus) (any, error) {
 
+	logging.Info("Creating commit status", "sha", sha)
 	httpClient, err := inter.createHttpClient(ciToken)
 	if err != nil {
 		return nil, err
@@ -64,16 +66,18 @@ func (inter *Interactor) CreateCommitStatus(ctx context.Context, projectId, sha,
 
 	err0 := httpClient.Post(ctx, "/projects/"+(utils.EncodeURIComponent(projectId))+"/statuses/"+sha, url.Values{}, payload, &response)
 	if err0 != nil {
-		log.Fatalf("error creating commit status: %s", err0.Error())
+		logging.Error("error creating commit status", err0.Error())
 		return nil, err0
 	}
 
-	log.Println("created commit status for", sha, response)
+	logging.Info("created commit status for", "sha", sha, "response", response)
 
 	return response, nil
 }
 
 func (inter *Interactor) CreateOrUpdateMergeRequestComment(ctx context.Context, projectId, mergeRequestId, comment, ciToken string) (*domain.GitLabNote, error) {
+
+	logging.Info("Creating comment with sonar report")
 
 	httpClient, err := inter.createHttpClient(ciToken)
 
@@ -89,6 +93,7 @@ func (inter *Interactor) CreateOrUpdateMergeRequestComment(ctx context.Context, 
 		url.Values{},
 		&notesResponse,
 	); err0 != nil {
+		logging.Error("échec de récupération des notes de la MR/PR", "mrIID", mergeRequestId)
 		return nil, err0
 	}
 	var existingComment *NoteResponse
@@ -102,7 +107,7 @@ func (inter *Interactor) CreateOrUpdateMergeRequestComment(ctx context.Context, 
 	}
 
 	if existingComment != nil {
-		log.Println("Deleting de existing comment to pin up sonarqube analysis report")
+		logging.Info("Deleting de existing comment to pin up sonarqube analysis report")
 		errdel := httpClient.Delete(
 			ctx,
 			"/projects/"+(utils.EncodeURIComponent(projectId))+"/merge_requests/"+mergeRequestId+"/notes/"+strconv.Itoa(existingComment.ID),
@@ -110,17 +115,19 @@ func (inter *Interactor) CreateOrUpdateMergeRequestComment(ctx context.Context, 
 			"",
 			nil,
 		)
-		log.Println("Deleted existing sticky comment")
+		logging.Info("Deleted existing sticky comment")
 		if errdel != nil {
+			logging.Info("échec de suppression du dernier commentaire type Analyse Sonar (commit note)", "commentId", existingComment.ID)
 			return nil, errdel
 		}
 
 		response, errc := createNewComment(ctx, httpClient, projectId, mergeRequestId, comment)
 
 		if errc != nil {
+			logging.Info("échec de création d'un nouveau commentaire Analyse Sonar (commit note)", "commentId", existingComment.ID)
 			return nil, errc
 		}
-		log.Println("spin up existing comment on MR !", mergeRequestId)
+		logging.Info("spin up existing comment on MR !", mergeRequestId)
 		return toDomain(*response), nil
 
 	}
@@ -132,7 +139,7 @@ func (inter *Interactor) CreateOrUpdateMergeRequestComment(ctx context.Context, 
 func (inter *Interactor) GetMergeRequest(ctx context.Context, projectId, mergeRequestId, ciToken string) (*domain.GitLabMergeRequest, error) {
 	httpClient, err := inter.createHttpClient(ciToken)
 	if err != nil {
-		log.Println("Error creating httpclient")
+		logging.Error("Error creating httpclient")
 		return nil, err
 	}
 
@@ -144,7 +151,7 @@ func (inter *Interactor) GetMergeRequest(ctx context.Context, projectId, mergeRe
 		nil,
 		&response,
 	); err0 != nil {
-		log.Println("Error getting MR:", mergeRequestId)
+		logging.Error("Error getting MR","mrIID", mergeRequestId, err0)
 		return nil, err0
 	}
 
@@ -182,9 +189,10 @@ func createNewComment(ctx context.Context, httpClient *http.Client, projectId, m
 		&response,
 	)
 	if err != nil {
+		logging.Info("échec création du commentaire (commit note)", "mrIId", mergeRequestId, err)
 		return nil, err
 	}
-	log.Println("created new comment on MR !", mergeRequestId)
+	logging.Info("created new comment on MR !", "mrIID", mergeRequestId)
 	return &response, nil
 }
 

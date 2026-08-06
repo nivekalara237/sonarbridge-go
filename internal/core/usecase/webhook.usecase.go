@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
-	"log/slog"
 	"sonarbridge-go/internal/core/domain"
 	"sonarbridge-go/internal/core/interactor"
 	"sonarbridge-go/internal/infra/utils"
@@ -17,13 +15,11 @@ type Service struct {
 	interactor.SonarInteractor
 	interactor.GitlabInteractor
 	interactor.ReportInteractor
-
-	Logger *logging.Logger
 }
 
 func (svc *Service) Execute(ctx context.Context, webhookData domain.SonarQubeWebhookPayload) (*domain.WebhookResponse, error) {
 
-	log.Println("Processing SonarQube webhook", map[string]any{
+	logging.Info("Processing SonarQube webhook", map[string]any{
 		"project": webhookData.SonarProject.Key,
 		"branch":  webhookData.Branch.Name,
 		"status":  webhookData.Status,
@@ -37,13 +33,13 @@ func (svc *Service) Execute(ctx context.Context, webhookData domain.SonarQubeWeb
 		*webhookData.TaskID,
 	)
 	if err != nil {
-		slog.Error("échec récupération analisysId", "taskId", webhookData.TaskID, err)
+		logging.Error("échec récupération analisysId", "taskId", webhookData.TaskID, err)
 	}
 
 	commitSha, _ := svc.getCommitSha(ctx, webhookData.GitLab.ProjectID, strconv.Itoa(webhookData.MergeRequest.IID), webhookData.Branch.Commit.SHA, webhookData.GitLab.CIToken)
 
 	if commitSha == "" {
-		slog.Error("échec de recuperation du commit sha pour la branch", webhookData.Branch.Name)
+		logging.Error("échec de recuperation du commit sha pour la branch", webhookData.Branch.Name)
 		return nil, errors.New("impossible de récupérer le commit SHA ou branc.commit.sha not fourni")
 	}
 	// mergeRequestId =
@@ -56,7 +52,7 @@ func (svc *Service) Execute(ctx context.Context, webhookData domain.SonarQubeWeb
 		Coverage:    utils.ToFloat32OrZero(analysis.Metrics["coverage"]),
 		PipelineId:  "",
 	}); errcc != nil {
-		slog.Error("échec de création du status du commit[", commitSha, "]")
+		logging.Error("échec de création du status du commit[", commitSha, "]", errcc)
 		return nil, errcc
 	}
 
@@ -71,7 +67,7 @@ func (svc *Service) Execute(ctx context.Context, webhookData domain.SonarQubeWeb
 			markdownRepport,
 			"",
 		); errmg != nil {
-			slog.Error("échec post commentaire GitLab", "mrIID", webhookData.MergeRequest.IID, "erreur", errmg)
+			logging.Error("échec post commentaire GitLab", "mrIID", webhookData.MergeRequest.IID, "erreur", errmg)
 			return nil, errors.New("erreur lors du post du commentaire GitLab")
 		}
 	} else {
@@ -91,8 +87,7 @@ func (svc *Service) getCommitSha(ctx context.Context, gitlabProjectId, mergeRequ
 
 	mr, err := svc.GitlabInteractor.GetMergeRequest(ctx, gitlabProjectId, mergeRequestId, *ciToken)
 	if err != nil {
-		slog.Error("échec de recuperation de la MR GitLab", "mrIID", mergeRequestId, "erreur", err)
-		// http.Error(w, "erreur lors du post du commentaire GitLab", http.StatusBadGateway)
+		logging.Error("échec de recuperation de la MR GitLab", "mrIID", mergeRequestId, "erreur", err)
 		return "", err
 	}
 

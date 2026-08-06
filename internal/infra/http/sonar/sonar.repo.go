@@ -3,12 +3,12 @@ package sonar
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"net/url"
 	"sonarbridge-go/configs"
 	"sonarbridge-go/internal/core/domain"
 	"sonarbridge-go/internal/core/interactor"
 	"sonarbridge-go/internal/infra/http"
+	"sonarbridge-go/internal/logging"
 	"strings"
 )
 
@@ -44,6 +44,7 @@ func (inter *Interactor) GetTaskDetails(ctx context.Context, taskId string) (*do
 	var response TaskResponse
 
 	if err0 := sonarClient.Get(ctx, "/ce/task", url.Values{"id": {taskId}}, &response); err0 != nil {
+		logging.Error("échec de récupération de la dernière analyse sonar", "taskId", taskId, "error", err0)
 		return nil, err0
 	}
 
@@ -61,6 +62,7 @@ func (inter *Interactor) GetAnalysisDetails(ctx context.Context, projectKey, bra
 	if len(actualTaskId) == 0 {
 		latestAnalysis, err := inter.GetLatestAnalysis(ctx, projectKey, branch)
 		if err != nil {
+			logging.Error("échec de récupération de la dernière analyse sonar", "taskId", taskId, "error", err)
 			return nil, err
 		}
 		analysisId = latestAnalysis.AnalysisId
@@ -68,7 +70,7 @@ func (inter *Interactor) GetAnalysisDetails(ctx context.Context, projectKey, bra
 	} else {
 		task, err := inter.GetTaskDetails(ctx, actualTaskId)
 		if err != nil {
-			slog.Error("échec récupération analysisId", "taskId", actualTaskId, "erreur", err)
+			logging.Error("échec récupération analysisId", "taskId", actualTaskId, "erreur", err)
 			return nil, err
 		}
 		analysisId = task.AnalysisId
@@ -85,7 +87,7 @@ func (inter *Interactor) GetAnalysisDetails(ctx context.Context, projectKey, bra
 	if err0 := sonarClient.Get(ctx,
 		"/qualitygates/project_status",
 		url.Values{"analysisId": {analysisId}}, &qgResponse); err0 != nil {
-		slog.Error("échec récupération project_status", "analysisId", analysisId, "erreur", err0)
+		logging.Error("échec récupération project_status", "analysisId", analysisId, "erreur", err0)
 		return nil, err0
 	}
 
@@ -120,6 +122,7 @@ func (inter *Interactor) GetAnalysisDetails(ctx context.Context, projectKey, bra
 			"software_quality_high_issues",
 			"software_quality_blocker_issues",
 		}}, &metricResponse); err1 != nil {
+		logging.Error("échec de récupération des mesures (métriques)", "taskId", taskId, "error", err1)
 		return nil, err1
 	}
 	var issuesResponse IssuesResponse
@@ -134,7 +137,7 @@ func (inter *Interactor) GetAnalysisDetails(ctx context.Context, projectKey, bra
 		return nil, err2
 	}
 
-	slog.Info("quality gate récupéré",
+	logging.Info("quality gate récupéré",
 		"status", qgResponse.ProjectStatus,
 		"nbConditions", len(qgResponse.ProjectStatus.Conditions),
 	)
@@ -205,6 +208,8 @@ func (inter *Interactor) GetLatestAnalysis(ctx context.Context, projectKey, bran
 		"branch":    {branch},
 		"ps":        {"1"},
 	}, &response); er != nil {
+		logging.Error("échec de récupération de l'activité sona", "branch", branch, "error", er)
+
 		return nil, er
 	}
 
@@ -215,6 +220,7 @@ func (inter *Interactor) GetLatestAnalysis(ctx context.Context, projectKey, bran
 	analysis, err := inter.GetAnalysisDetails(ctx, projectKey, branch, lastTask.AnalysisID)
 
 	if err != nil {
+		logging.Error("échec de récupération de la dernière analyse sonar", "analysisId", lastTask.AnalysisID, "error", err)
 		return nil, err
 	}
 

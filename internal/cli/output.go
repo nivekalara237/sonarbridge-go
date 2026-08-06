@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"sonarbridge-go/internal/logging"
 )
 
 type Output struct {
@@ -42,5 +43,6 @@ func (o *Output) Error(err error) {
 func (o *Output) Debug(enabled bool, format string, args ...any) {
 	if enabled {
 		fmt.Fprintf(o.w, "[DEBUG] "+format+"\n", args...)
+		logging.Debug("[DEBUG] "+format+"\n", args...)
 	}
 }

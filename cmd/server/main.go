@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -12,6 +13,9 @@ import (
 	"sonarbridge-go/internal/bootstrap"
 	"sonarbridge-go/internal/cli/serve"
 	"sonarbridge-go/internal/infra/entrypoints/rest"
+	"sonarbridge-go/internal/infra/utils"
+	"sonarbridge-go/internal/logging"
+	"strconv"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -30,9 +34,13 @@ func Execute() {
 }
 
 func init() {
-	rootCmd.AddCommand(serve.NewCommand(func() {
+	rootCmd.AddCommand(serve.NewServeCommand(func(port int, host string) {
 
 		cfg := configs.Load()
+
+		if err := logging.InitServer(*cfg); err != nil {
+			log.Fatal(err)
+		}
 
 		svc := bootstrap.NewApp(*cfg)
 
@@ -59,17 +67,20 @@ func init() {
 
 		// defer cancelCtx()
 
+		fport := utils.Ternary[string](port == 0, cfg.Port, strconv.Itoa(port))
 		serverOne := &http.Server{
-			Addr:         fmt.Sprintf(":%s", cfg.Port),
-			Handler:      *router,
-			ReadTimeout:  10 * time.Second,
-			WriteTimeout: 20 * time.Second,
-			IdleTimeout:  120 * time.Second,
+			Addr:              net.JoinHostPort(host, fport),
+			Handler:           *router,
+			ReadHeaderTimeout: 5 * time.Second,
+			WriteTimeout:      20 * time.Second,
+			IdleTimeout:       60 * time.Second,
 			BaseContext: func(listener net.Listener) context.Context {
 				ctx = context.WithValue(ctx, KeyServerAddr, listener.Addr().String())
 				return ctx
 			},
 		}
+
+		log.Printf("listening on %s", serverOne.Addr)
 
 		/*serverDocs := &http.Server{
 			Addr: ":4044",
@@ -128,7 +139,5 @@ func init() {
 }
 
 func main() {
-
 	Execute()
-
 }

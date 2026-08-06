@@ -16,7 +16,7 @@ func NewReportHandler(svc *usecase.Service) *ReportHandler {
 	}
 }
 
-func (h *ReportHandler) Handler(w http.ResponseWriter, request *http.Request) {
+func (h *ReportHandler) Handler(w http.ResponseWriter, request *http.Request) error {
 	fmt.Printf("Request to /projects/%s\n", request.PathValue("id"))
 	fmt.Println("Queries(raw) : ", request.URL.RawQuery)
 	fmt.Println("Queries : ", request.URL.Query())
@@ -24,4 +24,6 @@ func (h *ReportHandler) Handler(w http.ResponseWriter, request *http.Request) {
 	JSON(w, http.StatusOK, map[string]string{
 		"report": "OK",
 	})
+
+	return nil
 }

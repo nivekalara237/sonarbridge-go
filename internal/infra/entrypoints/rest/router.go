@@ -3,6 +3,7 @@ package rest
 import (
 	"net/http"
 	"sonarbridge-go/configs"
+	"sonarbridge-go/internal/infra/entrypoints/rest/httpx"
 	mdlw "sonarbridge-go/internal/infra/entrypoints/rest/middleware"
 )
 
@@ -17,9 +18,12 @@ func NewRouter(
 ) *http.Handler {
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("GET /healthz", health.GetZ)
-	mux.HandleFunc("POST /webhook/sonar", webhook.Handler)
-	mux.HandleFunc("GET /projects/{id}", report.Handler)
+	mux.Handle("/", httpx.Handlerx(func(w http.ResponseWriter, r *http.Request) error {
+		return httpx.ErrNotFound
+	}))
+	mux.Handle("GET /healthz", httpx.Handlerx(health.GetZ))
+	mux.Handle("POST /webhook/sonar", httpx.Handlerx(webhook.Handler))
+	mux.Handle("GET /projects/{id}", httpx.Handlerx(report.Handler))
 
 	return mdlw.NewBuilder(mux).
 		Add(func(handler http.Handler) http.Handler {
@@ -32,6 +36,7 @@ func NewRouter(
 		Add(mdlw.RateLimite).
 		Add(mdlw.SecurityHeadersMiddleware).
 		Add(mdlw.LoggingRequestMiddleware).
+		Add(mdlw.RequestID).
 		// Add().
 		Build()
 }
