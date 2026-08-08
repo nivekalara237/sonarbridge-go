@@ -3,7 +3,6 @@ package rest
 import (
 	"context"
 	"encoding/json"
-	"log/slog"
 	"net/http"
 	"sonarbridge-go/internal/core/domain"
 	"sonarbridge-go/internal/core/usecase"
@@ -30,7 +29,7 @@ func (useCase *WebhookHandler) Handler(writer http.ResponseWriter, request *http
 
 	var payload dto.WebhookRequestDto
 	decoder := json.NewDecoder(request.Body)
-	decoder.DisallowUnknownFields()
+	// decoder.DisallowUnknownFields()
 
 	if err := decoder.Decode(&payload); err != nil {
 		logging.Error("payload invalide", "error", err)
@@ -57,7 +56,12 @@ func (useCase *WebhookHandler) Handler(writer http.ResponseWriter, request *http
 		},
 		GitLab: domain.GitLab{
 			ProjectID: payload.GitLab.ProjectID,
-			CIToken:   payload.GitLab.CIToken,
+			CIToken: func() string {
+				if payload.GitLab.CIToken == nil {
+					return ""
+				}
+				return *payload.GitLab.CIToken
+			}(),
 		},
 		Branch: &domain.Branch{
 			Name: payload.GitLab.Branch,
@@ -73,18 +77,16 @@ func (useCase *WebhookHandler) Handler(writer http.ResponseWriter, request *http
 		Properties: nil,
 	})
 	if err != nil {
-		slog.Error("erreur inattendue", err)
+		logging.Error("erreur inattendue", err)
 		// http.Error(writer, err.Error(), http.StatusInternalServerError)
 		return httpx.ErrInternal
 	}
-
+	code := http.StatusOK
 	if !response.Mergeable {
-		writer.WriteHeader(http.StatusUnprocessableEntity)
-	} else {
-		writer.WriteHeader(http.StatusOK)
+		code = http.StatusUnprocessableEntity
 	}
-	writer.Header().Set("Content-Type", "application/json")
+	// writer.Header().Set("Content-Type", "application/json")
 	// fmt.Fprintf(writer, `{"received":%t,"qualityGateStatus":"%s","mergeable":%t}`, response.Received, response.QualityGateStatus, response.Mergeable)
-	httpx.WriteJSON(writer, 200, &response)
+	httpx.WriteJSON(writer, code, &response)
 	return nil
 }

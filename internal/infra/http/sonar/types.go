@@ -1,5 +1,7 @@
 package sonar
 
+import "time"
+
 type Severity string
 
 const (
@@ -27,9 +29,36 @@ type TaskResponse struct {
 
 type TasksResponse struct {
 	Tasks []struct {
-		AnalysisID string `json:"analysisId"`
+		AnalysisID string `json:"analysisId,omitempty"`
 		Status     string `json:"status"`
 	} `json:"tasks"`
+}
+
+type TasksCompleteResponse struct {
+	Tasks []struct {
+		ID                 string    `json:"id"`
+		Type               string    `json:"type,omitempty"`
+		ComponentID        string    `json:"componentId,omitempty"`
+		ComponentKey       string    `json:"componentKey,omitempty"`
+		ComponentName      string    `json:"componentName,omitempty"`
+		ComponentQualifier string    `json:"componentQualifier,omitempty"`
+		AnalysisID         string    `json:"analysisId,omitempty"`
+		Status             string    `json:"status"`
+		SubmittedAt        time.Time `json:"submittedAt"`
+		SubmitterLogin     string    `json:"submitterLogin,omitempty"`
+		StartedAt          time.Time `json:"startedAt,omitempty"`
+		ExecutedAt         time.Time `json:"executedAt,omitempty"`
+		ExecutionTimeMs    int       `json:"executionTimeMs,omitempty"`
+		HasScannerContext  bool      `json:"hasScannerContext"`
+		WarningCount       int       `json:"warningCount"`
+		Warnings           []string  `json:"warnings,omitempty"`
+		InfoMessages       []string  `json:"infoMessages,omitempty"`
+	} `json:"tasks"`
+	Paging struct {
+		PageIndex int `json:"pageIndex"`
+		PageSize  int `json:"pageSize"`
+		Total     int `json:"total"`
+	} `json:"paging"`
 }
 
 type QualityGateCondition struct {

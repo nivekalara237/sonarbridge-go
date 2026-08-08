@@ -1,29 +1,30 @@
 package rest
 
 import (
-	"fmt"
 	"net/http"
 	"sonarbridge-go/internal/core/usecase"
+	"sonarbridge-go/internal/infra/entrypoints/rest/httpx"
 )
 
 type ReportHandler struct {
-	Service *usecase.Service
+	reportService *usecase.ReportService
 }
 
-func NewReportHandler(svc *usecase.Service) *ReportHandler {
+func NewReportHandler(svc *usecase.ReportService) *ReportHandler {
 	return &ReportHandler{
-		Service: svc,
+		reportService: svc,
 	}
 }
 
 func (h *ReportHandler) Handler(w http.ResponseWriter, request *http.Request) error {
-	fmt.Printf("Request to /projects/%s\n", request.PathValue("id"))
-	fmt.Println("Queries(raw) : ", request.URL.RawQuery)
-	fmt.Println("Queries : ", request.URL.Query())
+	id := request.PathValue("id")
+	_ = request.PathValue("output")
 
-	JSON(w, http.StatusOK, map[string]string{
-		"report": "OK",
-	})
+	report, err := h.reportService.Get(request.Context(), id)
+	if err != nil {
+		return httpx.New(http.StatusNotFound, "not_found", "report with id %s is not found or something wrong white getting it", id)
+	}
+	httpx.WriteJSON(w, http.StatusOK, report)
 
 	return nil
 }

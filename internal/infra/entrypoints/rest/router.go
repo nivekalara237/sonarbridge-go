@@ -23,7 +23,7 @@ func NewRouter(
 	}))
 	mux.Handle("GET /healthz", httpx.Handlerx(health.GetZ))
 	mux.Handle("POST /webhook/sonar", httpx.Handlerx(webhook.Handler))
-	mux.Handle("GET /projects/{id}", httpx.Handlerx(report.Handler))
+	mux.Handle("GET /report/{id}", httpx.Handlerx(report.Handler))
 
 	return mdlw.NewBuilder(mux).
 		Add(func(handler http.Handler) http.Handler {
@@ -37,6 +37,9 @@ func NewRouter(
 		Add(mdlw.SecurityHeadersMiddleware).
 		Add(mdlw.LoggingRequestMiddleware).
 		Add(mdlw.RequestID).
+		Add(func(handler http.Handler) http.Handler {
+			return mdlw.AuthHmacSignature(config.WebhookSecret, handler)
+		}).
 		// Add().
 		Build()
 }

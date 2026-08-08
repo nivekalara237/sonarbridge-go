@@ -5,7 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"sonarbridge-go/internal/core/domain"
+	"sonarbridge-go/internal/core/domain/sonar"
 	"sonarbridge-go/internal/core/interactor"
+	"sonarbridge-go/internal/infra/renderer"
+	"sonarbridge-go/internal/infra/repository"
 	"sonarbridge-go/internal/infra/utils"
 	"sonarbridge-go/internal/logging"
 	"strconv"
@@ -15,6 +18,8 @@ type Service struct {
 	interactor.SonarInteractor
 	interactor.GitlabInteractor
 	interactor.ReportInteractor
+	repository.Repository
+	renderer *renderer.SonarReportRender
 }
 
 func (svc *Service) Execute(ctx context.Context, webhookData domain.SonarQubeWebhookPayload) (*domain.WebhookResponse, error) {
@@ -33,7 +38,7 @@ func (svc *Service) Execute(ctx context.Context, webhookData domain.SonarQubeWeb
 		*webhookData.TaskID,
 	)
 	if err != nil {
-		logging.Error("échec récupération analisysId", "taskId", webhookData.TaskID, err)
+		logging.Error("échec récupération analysisId", "taskId", webhookData.TaskID, err)
 	}
 
 	commitSha, _ := svc.getCommitSha(ctx, webhookData.GitLab.ProjectID, strconv.Itoa(webhookData.MergeRequest.IID), webhookData.Branch.Commit.SHA, webhookData.GitLab.CIToken)
@@ -56,15 +61,33 @@ func (svc *Service) Execute(ctx context.Context, webhookData domain.SonarQubeWeb
 		return nil, errcc
 	}
 
-	markdownRepport := svc.ReportInteractor.FormatMarkdown(*analysis)
+	report := &sonar.Report{
+		Status: sonar.AnalysisStatus(analysis.TaskId), // todo: fetch the real value from original task.status
+		Analysis: sonar.Analysis{
+			Key:       analysis.AnalysisId,
+			Project:   webhookData.SonarProject.Key,
+			Branch:    webhookData.Branch.Name,
+			CommitSHA: webhookData.Branch.Commit.SHA,
+		},
+	}
+
+	markdownReport := svc.ReportInteractor.FormatMarkdown(*analysis)
 	mergeable := analysis.QualityGate.Status == "OK"
+
+	if er := svc.ReportRepository.SaveReport(ctx, report); er != nil {
+		logging.Error("The report have not saved")
+	}
+
+	reportMD := renderer.NewSonarReportRenderer().Render(report)
+
+	fmt.Println(reportMD)
 
 	if webhookData.MergeRequest != nil {
 		if _, errmg := svc.GitlabInteractor.CreateOrUpdateMergeRequestComment(
 			ctx,
 			webhookData.GitLab.ProjectID,
 			strconv.Itoa(webhookData.MergeRequest.IID),
-			markdownRepport,
+			markdownReport,
 			"",
 		); errmg != nil {
 			logging.Error("échec post commentaire GitLab", "mrIID", webhookData.MergeRequest.IID, "erreur", errmg)
@@ -80,12 +103,12 @@ func (svc *Service) Execute(ctx context.Context, webhookData domain.SonarQubeWeb
 	}, nil
 }
 
-func (svc *Service) getCommitSha(ctx context.Context, gitlabProjectId, mergeRequestId, branchCommitSha string, ciToken *string) (string, error) {
+func (svc *Service) getCommitSha(ctx context.Context, gitlabProjectId, mergeRequestId, branchCommitSha string, ciToken string) (string, error) {
 	if branchCommitSha != "" {
 		return branchCommitSha, nil
 	}
 
-	mr, err := svc.GitlabInteractor.GetMergeRequest(ctx, gitlabProjectId, mergeRequestId, *ciToken)
+	mr, err := svc.GitlabInteractor.GetMergeRequest(ctx, gitlabProjectId, mergeRequestId, ciToken)
 	if err != nil {
 		logging.Error("échec de recuperation de la MR GitLab", "mrIID", mergeRequestId, "erreur", err)
 		return "", err

@@ -25,6 +25,7 @@ func (b *Builder) Build() *http.Handler {
 	h := b.handler
 	for i := len(b.middlewares) - 1; i >= 0; i-- {
 		h = b.middlewares[i](h)
+		// fmt.Printf("No%d = %s\n", i, runtime.FuncForPC(reflect.ValueOf(b.middlewares[i]).Pointer()).Name())
 	}
 	return &h
 }

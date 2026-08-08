@@ -12,7 +12,7 @@ func NewServeCommand(mainFunc func(port int, host string)) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:     "serve",
-		Short:   "Run the HTTP Server",
+		Short:   "Satrt the HTTP Server",
 		Aliases: []string{"run", "start"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			port, _ := cmd.Flags().GetString("port")

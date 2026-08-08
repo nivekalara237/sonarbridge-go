@@ -24,9 +24,14 @@ func New(cfg configs.Config) *Interactor {
 	}
 }
 
+var sonarClient *http.Client
+
 var _ interactor.SonarInteractor = (*Interactor)(nil)
 
 func (inter *Interactor) createHttpClient() (*http.Client, error) {
+	if sonarClient != nil {
+		return sonarClient, nil
+	}
 	baseUrl := inter.config.SonarBaseUrl
 	token := inter.config.SonarToken
 	if baseUrl == "" || token == "" {
@@ -55,7 +60,7 @@ func (inter *Interactor) GetTaskDetails(ctx context.Context, taskId string) (*do
 	}, nil
 }
 
-func (inter *Interactor) GetAnalysisDetails(ctx context.Context, projectKey, branch, taskId string) (*domain.AnalysisDetails, error) {
+func (inter *Interactor) GetAnalysisDetails(ctx context.Context, projectKey, branch, taskId, taskStatus string) (*domain.AnalysisDetails, error) {
 	var analysisId string
 	var actualTaskId = taskId
 
@@ -208,14 +213,13 @@ func (inter *Interactor) GetLatestAnalysis(ctx context.Context, projectKey, bran
 		"branch":    {branch},
 		"ps":        {"1"},
 	}, &response); er != nil {
-		logging.Error("échec de récupération de l'activité sona", "branch", branch, "error", er)
-
+		logging.Error("échec de récupération de la dernière activité Sonar", "branch", branch, "error", er)
 		return nil, er
 	}
 
 	lastTask := response.Tasks[0]
 	if len(response.Tasks) <= 0 {
-		return nil, errors.New("no analysis found for project")
+		return nil, errors.New("no analysis found for the project key (ComponentKey): " + projectKey)
 	}
 	analysis, err := inter.GetAnalysisDetails(ctx, projectKey, branch, lastTask.AnalysisID)
 
@@ -225,4 +229,21 @@ func (inter *Interactor) GetLatestAnalysis(ctx context.Context, projectKey, bran
 	}
 
 	return analysis, nil
+}
+
+func (inter *Interactor) GetLastTask(ctx context.Context, projectKey, branch string) (*domain.SonarTaskDetails, error) {
+	sonarClient, e := inter.createHttpClient()
+	if e != nil {
+		return nil, e
+	}
+
+	var response TasksResponse
+	if er := sonarClient.Get(ctx, "/ce/activity", url.Values{
+		"component": {projectKey},
+		"branch":    {branch},
+		"ps":        {"1"},
+	}, &response); er != nil {
+		logging.Error("échec de récupération de la dernière activité Sonar", "branch", branch, "error", er)
+		return nil, er
+	}
 }

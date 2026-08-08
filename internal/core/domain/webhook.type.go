@@ -17,7 +17,7 @@ type Project struct {
 
 type GitLab struct {
 	ProjectID string
-	CIToken   *string
+	CIToken   string
 }
 
 type Branch struct {

@@ -1,6 +1,9 @@
 package httpx
 
-import "net/http"
+import (
+	"fmt"
+	"net/http"
+)
 
 type APIError struct {
 	Status  int    `json:"-"`
@@ -24,8 +27,8 @@ func (e *APIError) Wrap(err error) *APIError {
 	return &c
 }
 
-func New(status int, code, msg string) *APIError {
-	return &APIError{Status: status, Code: code, Message: msg}
+func New(status int, code, msg string, args ...any) *APIError {
+	return &APIError{Status: status, Code: code, Message: fmt.Sprintf(msg, args)}
 }
 
 var (
@@ -34,4 +37,5 @@ var (
 	ErrUnauthorized     = New(401, "unauthorized", "authentification requise")
 	ErrInternal         = New(500, "internal_error", "erreur interne")
 	ErrMethodNotAllowed = New(http.StatusMethodNotAllowed, "method_not_allowed", "méthode non autorisée")
+	ErrForbidden        = New(http.StatusForbidden, "forbidden", "operation interdite")
 )

@@ -85,7 +85,7 @@ func NewAnalyzeCommand(svc *usecase.Service, cliCtx *Context) *cobra.Command {
 				},
 				GitLab: domain.GitLab{
 					ProjectID: positionArgs.gitlabProjectId,
-					CIToken:   &options.ciToken,
+					CIToken:   options.ciToken,
 				},
 				Branch: &domain.Branch{
 					Name: positionArgs.branchName,
