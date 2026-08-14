@@ -24,10 +24,12 @@ type Config struct {
 	Host string
 
 	SonarBaseUrl string
+	SonarCACert  string
 	SonarToken   string
 
 	GitlabBaseUrl string
 	GitlabToken   string
+	GitlabCACert  string
 
 	WebhookSecret string
 
@@ -79,6 +81,8 @@ func Load() *Config {
 		},
 		SonarEdition:  SonarQubeEdition(utils.GetEnvOrDefault("SONARQUBE_EDITION", string(SONARQUBE_CE))),
 		GitLabEdition: GitlabEdition(utils.GetEnvOrDefault("GITLAB_EDITION", string(GITLAB_CE))),
+		GitlabCACert:  utils.GetEnvOrDefault("GITLAB_CA_CERT", ""),
+		SonarCACert:   utils.GetEnvOrDefault("SONAR_CA_CERT", ""),
 	}
 
 }

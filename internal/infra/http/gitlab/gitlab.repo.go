@@ -37,7 +37,7 @@ func (inter *Interactor) createHttpClient(ciToken string) (*http.Client, error) 
 	if strings.TrimSpace(ciToken) != "" {
 		token = "ci;" + token
 	}
-	return http.NewClientHttp(strings.TrimRight(baseUrl, "/"), token, "gitlab"), nil
+	return http.NewClientHttp(strings.TrimRight(baseUrl, "/"), token, "gitlab", inter.config.GitlabCACert), nil
 }
 
 func (inter *Interactor) CreateCommitStatus(ctx context.Context, projectId, sha, ciToken string, statusData domain.GitlabCommitStatus) (any, error) {

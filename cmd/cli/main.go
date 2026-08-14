@@ -10,9 +10,11 @@ import (
 )
 
 func main() {
-	cfg := configs.Load()
+	// cfg := configs.Load()
 
-	if err := logging.InitCLI(*cfg); err != nil {
+	cfg := configs.Config{LogLevel: "error"}
+
+	if err := logging.InitCLI(cfg); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

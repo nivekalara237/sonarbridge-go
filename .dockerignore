@@ -19,7 +19,6 @@ coverage.html
 /vendor/
 /.glide/
 /.godeps/
-/go.sum
 go.work
 go.work.sum
 
@@ -45,6 +44,9 @@ Thumbs.db
 *.log
 tmp/
 temp/
+
+Dockerfile*
+docker-compose*.yml
 
 docs/
 README.md

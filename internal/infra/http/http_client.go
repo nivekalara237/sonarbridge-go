@@ -3,11 +3,14 @@ package http
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"sonarbridge-go/internal/logging"
 	"strings"
 	"time"
@@ -43,9 +46,24 @@ type Client struct {
 	httpClient *http.Client
 }
 
-func NewClientHttp(baseUrl, token string, cType ClientType) *Client {
+func NewClientHttp(baseUrl, token string, cType ClientType, caCertPath string) *Client {
 	if baseUrl == "" {
 		return nil
+	}
+
+	var transport *http.Transport
+
+	if caCertPath != "" {
+		pool, err := loadCAPool(caCertPath)
+		if err != nil {
+			panic(err)
+		}
+		transport = &http.Transport{
+			TLSClientConfig: &tls.Config{
+				RootCAs:    pool,
+				MinVersion: tls.VersionTLS12,
+			},
+		}
 	}
 
 	return &Client{
@@ -53,7 +71,8 @@ func NewClientHttp(baseUrl, token string, cType ClientType) *Client {
 		token:     token,
 		clientFor: cType,
 		httpClient: &http.Client{
-			Timeout: 10 * time.Second,
+			Timeout:   10 * time.Second,
+			Transport: transport,
 		},
 	}
 }
@@ -197,4 +216,22 @@ func (c *Client) Delete(ctx context.Context, path string, params url.Values, pay
 
 func isSuccess(statusCode int) bool {
 	return statusCode >= 200 && statusCode < 300
+}
+
+func loadCAPool(certPath string) (*x509.CertPool, error) {
+	pool, err := x509.SystemCertPool()
+	if err != nil {
+		return nil, fmt.Errorf("load system cert pool: %w", err)
+	}
+
+	pemData, err := os.ReadFile(certPath)
+	if err != nil {
+		return nil, fmt.Errorf("read CA certificate: %w", err)
+	}
+
+	if ok := pool.AppendCertsFromPEM(pemData); !ok {
+		return nil, fmt.Errorf("append CA certificate")
+	}
+
+	return pool, nil
 }

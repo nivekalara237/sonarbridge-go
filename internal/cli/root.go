@@ -6,12 +6,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var RootCommandUseName = "sonarbridge-cli"
+
 func NewRootCommand() *cobra.Command {
 
 	cliCtx := &CliContext{}
 	var outputFormat OutputFormat
 	rootCommand := &cobra.Command{
-		Use:           "sonarbridge-cli",
+		Use:           RootCommandUseName,
 		Short:         "SonarBridge CLI",
 		SilenceErrors: true,
 		SilenceUsage:  true,

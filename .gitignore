@@ -1,7 +1,6 @@
 *.env
 .idea
 /.idea
-go.sum
 
 /bin/
 
@@ -10,4 +9,6 @@ go.sum
 *feature*.md
 
 
-frontend
+frontend/
+
+Dockerfile*

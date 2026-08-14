@@ -41,7 +41,7 @@ func (inter *Interactor) createHttpClient() (*http.Client, error) {
 	if baseUrl == "" || token == "" {
 		return nil, errors.New("variable d'environnement SONARQUBE_URL ou SONARQUBE_TOKEN manquante")
 	}
-	return http.NewClientHttp(strings.TrimRight(baseUrl, "/"), token, "sonar"), nil
+	return http.NewClientHttp(strings.TrimRight(baseUrl, "/"), token, "sonar", inter.config.SonarCACert), nil
 }
 
 func (inter *Interactor) GetTaskDetails(ctx context.Context, taskId string) (*domain.SonarTaskDetails, error) {

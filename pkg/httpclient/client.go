@@ -3,6 +3,8 @@ package httpclient
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,6 +12,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/url"
+	"os"
 	"sonarbridge-go/pkg/arrays"
 	stringify "sonarbridge-go/pkg/string"
 	"strings"
@@ -42,12 +45,18 @@ type RetryConfig struct {
 	RetryOn    func(resp *http.Response, err error) bool
 }
 
+type TLSConfig struct {
+	CaCertPath    string
+	CaCertPemData string
+}
+
 type Client struct {
 	headers    http.Header
 	httpClient *http.Client
 	baseURL    *url.URL
 	retry      RetryConfig
 	cache      Cache
+	Tls        TLSConfig
 }
 
 func NewClientHttp(opts ...Option) *Client {
@@ -98,6 +107,36 @@ func WithRetry(maxRetries int, backoff time.Duration) Option {
 func WithCache(cache Cache) Option {
 	return func(c *Client) {
 		c.cache = cache
+	}
+}
+
+func WithTLSCACertFile(caCertFile string) Option {
+	return func(c *Client) {
+		ca, err := loadCAPool(caCertFile)
+		if err != nil {
+			panic(err)
+		}
+		c.httpClient.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{
+				RootCAs:    ca,
+				MinVersion: tls.VersionTLS12,
+			},
+		}
+	}
+}
+
+func WithTLSCAPemData(data string) Option {
+	return func(c *Client) {
+		ca, err := loadPemData(data)
+		if err != nil {
+			panic(err)
+		}
+		c.httpClient.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{
+				RootCAs:    ca,
+				MinVersion: tls.VersionTLS12,
+			},
+		}
 	}
 }
 
@@ -301,4 +340,35 @@ func (c *Client) shouldRetry(resp *http.Response) bool {
 		return true
 	}
 	return false
+}
+
+func loadCAPool(certPath string) (*x509.CertPool, error) {
+	pool, err := x509.SystemCertPool()
+	if err != nil {
+		return nil, fmt.Errorf("load system cert pool: %w", err)
+	}
+
+	pemData, err := os.ReadFile(certPath)
+	if err != nil {
+		return nil, fmt.Errorf("read CA certificate: %w", err)
+	}
+
+	if ok := pool.AppendCertsFromPEM(pemData); !ok {
+		return nil, fmt.Errorf("append CA certificate")
+	}
+
+	return pool, nil
+}
+
+func loadPemData(pemData string) (*x509.CertPool, error) {
+	pool, err := x509.SystemCertPool()
+	if err != nil {
+		return nil, fmt.Errorf("load system cert pool: %w", err)
+	}
+
+	if ok := pool.AppendCertsFromPEM([]byte(pemData)); !ok {
+		return nil, fmt.Errorf("append CA certificate")
+	}
+
+	return pool, nil
 }

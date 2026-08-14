@@ -11,6 +11,7 @@ import (
 	"os"
 	"sonarbridge-go/configs"
 	"sonarbridge-go/internal/bootstrap"
+	"sonarbridge-go/internal/build"
 	"sonarbridge-go/internal/cli/serve"
 	"sonarbridge-go/internal/core/usecase"
 	"sonarbridge-go/internal/infra/entrypoints/rest"
@@ -23,10 +24,21 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const banner = `
+  ____   ___  _   _    _    ____      ____  ____   ___ _____   ____   ___   _____ 
+ / ___| / _ \| \ | |  / \  |  _ \    | __ )|  _ \_ _|  __ \ | |  _ \ / _ \ | ____|
+ \___ \| | | |  \| | / _ \ | |_) |   |  _ \| |_) | || |__) || | |_) | | | ||  _|  
+  ___) | |_| | |\  |/ ___ \|  _ <    | |_) |  __/| ||  _  / | |  _ <| |_| || |___ 
+ |____/ \___/|_| \_/_/   \_\_| \_\   |____/|_|  |___|_| \_\ | |_| \_\\___/ |_____|
+                                                                                   
+SONARBRIDE-GO :: Application Started :: Go`
+
 const KeyServerAddr = "KeyAddr"
 
+var AppServerCommandUseName = "sonarbridge"
+
 var rootCmd = &cobra.Command{
-	Use: "sonarbridge",
+	Use: AppServerCommandUseName,
 }
 
 func Execute() {
@@ -37,6 +49,11 @@ func Execute() {
 
 func init() {
 	rootCmd.AddCommand(serve.NewServeCommand(func(port int, host string) {
+
+		fmt.Println(banner)
+		fmt.Println()
+		fmt.Println(build.GetBuildInfo().ToServerString())
+		fmt.Println()
 
 		cfg := configs.Load()
 
