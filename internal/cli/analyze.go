@@ -1,19 +1,14 @@
 package cli
 
 import (
-	"context"
 	"fmt"
-	"log"
-	"sonarbridge-go/internal/core/domain"
-	"sonarbridge-go/internal/core/usecase"
-	"sonarbridge-go/internal/infra/utils"
+	usecase2 "sonarbridge-go/internal/cli/usecase"
 	"strconv"
-	"time"
 
 	"github.com/spf13/cobra"
 )
 
-type analyseOptions struct {
+type AnalyseOptions struct {
 	mrIid           string
 	commitUrl       string
 	commitSha       string
@@ -30,7 +25,7 @@ type positionalArgs struct {
 
 const (
 	helpExample = `  # Analyze the main branch (outside of mr/pr)
-  sonarbridge-cli analyze my-project main --sonar-task-id=AYx123456 --sonar-project-key=my-quality-project
+  sonarbridge-cli analyze my-project main --sonar-task-id=AYx123456 --sonar-project-key=my-quality-project --sever-shared-key=xxxx
 
   # Analyze a Merge Request
   sonarbridge-cli analyze my-project feature/login \
@@ -38,6 +33,10 @@ const (
     --commit-sha=abc123 \
     --commit-url=https://gitlab.example.com/... \
     --ci-token=$CI_JOB_TOKEN \
+    --sever-shared-key=$CI_JOB_TOKEN \
+    --server-url=https://sonarbridge.cavom.lan \
+    --server-cert=string-certificate.pem \
+    --server-key=string-certificate.key \
     --sonar-task-id=AYx123456 \
     --sonar-project-key=my-quality-project \
     --status=SUCCESS`
@@ -47,16 +46,30 @@ The project ID and branch are required positional arguments.
 Additional metadata can be provided through flags (Merge Request, commit, CI, etc.).`
 )
 
-var options analyseOptions
+var options AnalyseOptions
 
-func NewAnalyzeCommand(svc *usecase.Service, cliCtx *Context) *cobra.Command {
+func NewAnalyzeCommand(cliCtx *CliContext) *cobra.Command {
 	analyzeCommand := &cobra.Command{
-		Use:     "analyze  <project-id> <branch>",
-		Short:   "Fetch SonarQube Analysis and créate a MR/PR rapport message",
+		Use:     "analyze  <gitlab-project-id> <branch-name>",
+		Short:   "Fetch SonarQube Analysis and create a MR/PR rapport message",
 		Long:    helpLongDescription,
 		Example: helpExample,
-		Args:    cobra.ExactArgs(2),
+		// Args:    cobra.ExactArgs(2),
+		Args: func(cmd *cobra.Command, args []string) error {
+			if len(args) != 2 {
+				return &CLIError{
+					Err: fmt.Errorf(
+						"accepts 2 args(s), received %d",
+						len(args),
+					),
+					ShowUsage: true,
+					Command:   cmd,
+				}
+			}
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
+
 			fmt.Println("Executing analyse command...")
 
 			if cliCtx.Verbose {
@@ -70,50 +83,40 @@ func NewAnalyzeCommand(svc *usecase.Service, cliCtx *Context) *cobra.Command {
 			}
 
 			fmt.Printf("ProjectID=%s and branch=%s\n", positionArgs.gitlabProjectId, positionArgs.branchName)
-			fmt.Println(options)
-
-			svcCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-			defer cancel()
 
 			mr, _ := strconv.Atoi(options.mrIid)
 
-			payload := domain.SonarQubeWebhookPayload{
-				TaskID: &options.taskId,
-				Status: utils.Ternary[domain.WebhookStatus](options.analysisStatus == "SUCCESS", "SUCCESS", "FAILED"),
-				SonarProject: domain.Project{
-					Key: options.sonarProjectKey,
+			payload := usecase2.GenerateSonarReportRequest{
+				TaskId: options.taskId,
+				SonarProject: struct {
+					Key string `json:"key"`
+				}{Key: options.sonarProjectKey},
+				Gitlab: struct {
+					ProjectId  string `json:"projectId"`
+					CiToken    string `json:"ciToken"`
+					BranchName string `json:"branchName"`
+					BranchUrl  string `json:"branchUrl"`
+					CommitSha  string `json:"commitSha"`
+				}{
+					ProjectId:  positionArgs.gitlabProjectId,
+					BranchName: positionArgs.branchName,
+					CommitSha:  options.commitSha,
+					BranchUrl:  options.commitUrl,
+					CiToken:    options.ciToken,
 				},
-				GitLab: domain.GitLab{
-					ProjectID: positionArgs.gitlabProjectId,
-					CIToken:   options.ciToken,
-				},
-				Branch: &domain.Branch{
-					Name: positionArgs.branchName,
-					URL:  &options.commitUrl,
-					Commit: &domain.Commit{
-						SHA:     options.commitSha,
-						Message: "",
-					},
-				},
-				MergeRequest: &domain.MergeRequest{
-					IID: mr,
-				},
-				Properties: nil,
+				MergeRequest: struct {
+					IID int `json:"iid"`
+				}{IID: mr},
 			}
 
-			response, err := svc.Execute(svcCtx, payload)
-			if err != nil {
-				return err
-			}
+			uc := usecase2.NewGenerateSonarReport(
+				cliCtx.serverUrl,
+			)
 
-			log.Println("Response cli:", response.Received, response.Mergeable, response.QualityGateStatus)
-
-			if options.mrIid != "" && (response.Mergeable && response.Received) {
-				return fmt.Errorf("something wrong on your code, check report of analysis")
-			} else if !response.Received {
-				return fmt.Errorf("unknown error")
-			}
-			return cliCtx.Output.Print(response)
+			return uc.ExecuteSonarRequest(
+				payload,
+				cliCtx.serverSharedKey,
+			)
 		},
 	}
 
@@ -168,6 +171,7 @@ func NewAnalyzeCommand(svc *usecase.Service, cliCtx *Context) *cobra.Command {
 
 	_ = analyzeCommand.MarkFlagRequired("sonar-project-key")
 	_ = analyzeCommand.MarkFlagRequired("sonar-task-id")
+	_ = analyzeCommand.MarkFlagRequired("sever-shared-key")
 
 	return analyzeCommand
 }

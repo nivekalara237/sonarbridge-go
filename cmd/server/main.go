@@ -12,7 +12,9 @@ import (
 	"sonarbridge-go/configs"
 	"sonarbridge-go/internal/bootstrap"
 	"sonarbridge-go/internal/cli/serve"
+	"sonarbridge-go/internal/core/usecase"
 	"sonarbridge-go/internal/infra/entrypoints/rest"
+	"sonarbridge-go/internal/infra/repository/report"
 	"sonarbridge-go/internal/infra/utils"
 	"sonarbridge-go/internal/logging"
 	"strconv"
@@ -46,7 +48,7 @@ func init() {
 
 		healthHandler := rest.NewHealthHandler()
 		webhookHandler := rest.NewWebhookHandler(svc.Service)
-		reportHandler := rest.NewReportHandler(svc.Service)
+		reportHandler := rest.NewReportHandler(usecase.NewReportService(report.NewRepository()))
 
 		router := rest.NewRouter(
 			*cfg,

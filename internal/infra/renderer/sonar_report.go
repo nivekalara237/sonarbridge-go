@@ -1,14 +1,19 @@
 package renderer
 
 import (
+	"bytes"
 	"fmt"
+	html "html/template"
 	"sonarbridge-go/internal/core/domain/sonar"
 	"sonarbridge-go/internal/logging"
 	"strings"
+	text "text/template"
 )
 
 type SonarReportRender struct {
-	Output string // md, html, xml
+	Output  string // md, html, xml
+	tpl     *text.Template
+	tplHtml *html.Template
 }
 
 func NewSonarReportRenderer() *SonarReportRender {
@@ -20,12 +25,22 @@ func NewSonarReportHtmlRenderer() *SonarReportRender {
 }
 
 func (r *SonarReportRender) Render(report *sonar.Report) string {
-	if report != nil {
+
+	if report == nil {
 		logging.Warn("trying to render nil report")
 		return ""
 	}
 
-	if r.Output != "md" {
+	if r.Output == "md" {
+
+		var buf bytes.Buffer
+		err := r.tpl.Execute(&buf, report)
+		if err != nil {
+			return ""
+		}
+
+		// return buf.String()
+
 		var b strings.Builder
 
 		b.WriteString("────────────────────────────────────\n")

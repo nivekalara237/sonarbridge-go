@@ -15,6 +15,9 @@ type CorsConfig struct {
 	AllowCredentials bool
 }
 
+type SonarQubeEdition string
+type GitlabEdition string
+
 type Config struct {
 	Env  string
 	Port string
@@ -31,7 +34,22 @@ type Config struct {
 	LogLevel string
 
 	Cors *CorsConfig
+
+	SonarEdition  SonarQubeEdition
+	GitLabEdition GitlabEdition
 }
+
+const (
+	SONARQUBE_CE        SonarQubeEdition = "community"
+	SONARQUBE_DEVELOPER SonarQubeEdition = "developer"
+	SONARQUBE_EE        SonarQubeEdition = "enterprise"
+)
+
+const (
+	GITLAB_CE       GitlabEdition = "community"
+	GITLAB_PREMIUM  GitlabEdition = "community"
+	GITLAB_ULTIMATE GitlabEdition = "community"
+)
 
 func Load() *Config {
 
@@ -59,6 +77,8 @@ func Load() *Config {
 			AllowedHeaders:   utils.GetEnvOrDefault("CORS_ALLOWED_HEADERS", "*"),
 			AllowCredentials: allowCreds,
 		},
+		SonarEdition:  SonarQubeEdition(utils.GetEnvOrDefault("SONARQUBE_EDITION", string(SONARQUBE_CE))),
+		GitLabEdition: GitlabEdition(utils.GetEnvOrDefault("GITLAB_EDITION", string(GITLAB_CE))),
 	}
 
 }

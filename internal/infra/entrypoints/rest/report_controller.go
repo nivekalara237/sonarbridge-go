@@ -20,7 +20,7 @@ func (h *ReportHandler) Handler(w http.ResponseWriter, request *http.Request) er
 	id := request.PathValue("id")
 	_ = request.PathValue("output")
 
-	report, err := h.reportService.Get(request.Context(), id)
+	report, err := h.reportService.ExecuteGet(request.Context(), id)
 	if err != nil {
 		return httpx.New(http.StatusNotFound, "not_found", "report with id %s is not found or something wrong white getting it", id)
 	}

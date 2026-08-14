@@ -2,25 +2,30 @@ package cli
 
 import "fmt"
 
-type Context struct {
-	ConfigFile string
-	Verbose    bool
-	LogLevel   string
-	Output     *Output
+type CliContext struct {
+	ConfigFile      string
+	Verbose         bool
+	LogLevel        string
+	serverCert      string
+	serverKey       string
+	serverSharedKey string
+	serverUrl       string
+	Output          *Output
 }
 
 type OutputFormat = string
 
 const (
-	JSON  = "json"
-	TABLE = "table"
-	TEXT  = "text"
+	JSON  OutputFormat = "json"
+	TABLE OutputFormat = "table"
+	TEXT  OutputFormat = "text"
 )
 
 var (
 	validOutputs = map[string]struct{}{
-		"text": {},
-		"json": {},
+		"text":  {},
+		"json":  {},
+		"table": {},
 	}
 
 	validLogLevels = map[string]struct{}{
@@ -31,7 +36,7 @@ var (
 	}
 )
 
-func (ctx *Context) Validate() error {
+func (ctx *CliContext) Validate() error {
 	if _, ok := validOutputs[ctx.Output.format]; !ok {
 		return fmt.Errorf("invalid output format %q (allowed: text, json, table)", ctx.Output.format)
 	}

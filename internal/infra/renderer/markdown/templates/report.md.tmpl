@@ -1,0 +1,39 @@
+
+### 🔎 SonarQube Analysis :bar_chart:
+
+Status       {{ analysisStatus .Status }}\
+Quality Gate {{ qualityGateStatus .QualityGate }}
+
+#### Issues
+
+🔴 *Blocker*       {{ .Issues.Blocker }}\
+🔴 *Critical*      {{ .Issues.Critical }}\
+🟠 *Major*        {{ .Issues.Major }}\
+🟡 *Minor*         {{ .Issues.Minor }}
+
+
+#### New about downstream of branch
+
+{{- if gt .Measures.CodeSmells 0 }}
+*Code Smells*            {{ .Measures.CodeSmells }}
+{{- end }}
+
+{{- if gt .Issues.NewIssues 0 }}
+*New Issues*              {{ .Issues.NewIssues }}
+{{- end }}
+
+
+{{- if gt .Issues.NewBugs 0 }}
+*New Bugs*                {{ .Issues.NewBugs }}
+{{- end }}
+
+
+
+{{- if gt .Issues.NewVulnerabilities 0 }}
+*New Vulnerabilities*     {{ .Issues.NewVulnerabilities }}
+{{- end }}
+
+
+────────────────────────────────────
+
+[ View detailed report ]({{ .ReportURL }})

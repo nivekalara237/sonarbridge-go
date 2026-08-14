@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sonarbridge-go/internal/core/domain"
 	"sonarbridge-go/internal/core/domain/sonar"
 	"sonarbridge-go/internal/core/interactor"
@@ -11,6 +12,7 @@ import (
 	"sonarbridge-go/internal/infra/repository"
 	"sonarbridge-go/internal/infra/utils"
 	"sonarbridge-go/internal/logging"
+	"sonarbridge-go/pkg/render"
 	"strconv"
 )
 
@@ -24,18 +26,19 @@ type Service struct {
 
 func (svc *Service) Execute(ctx context.Context, webhookData domain.SonarQubeWebhookPayload) (*domain.WebhookResponse, error) {
 
-	logging.Info("Processing SonarQube webhook", map[string]any{
-		"project": webhookData.SonarProject.Key,
-		"branch":  webhookData.Branch.Name,
-		"status":  webhookData.Status,
-		"mr":      webhookData.MergeRequest,
-	})
+	var taskStatus domain.TaskStatus
+	if webhookData.Status != "" {
+		taskStatus = domain.TaskStatus(webhookData.Status)
+	} else {
+		taskStatus = domain.TASK_UNKNOWN
+	}
 
 	analysis, err := svc.SonarInteractor.GetAnalysisDetails(
 		ctx,
 		webhookData.SonarProject.Key,
 		webhookData.Branch.Name,
 		*webhookData.TaskID,
+		taskStatus,
 	)
 	if err != nil {
 		logging.Error("échec récupération analysisId", "taskId", webhookData.TaskID, err)
@@ -53,7 +56,7 @@ func (svc *Service) Execute(ctx context.Context, webhookData domain.SonarQubeWeb
 		Status:      utils.Ternary(analysis.QualityGate.Status == "OK", "success", "failed"),
 		Name:        "SonarQube Quality Gate",
 		TargetUrl:   analysis.DashboardUrl,
-		Description: fmt.Sprintf("SonarQube Quality gate: %s", analysis.QualityGate.Status),
+		Description: fmt.Sprintf("SonarQube Quality Report: %s", analysis.QualityGate.Status),
 		Coverage:    utils.ToFloat32OrZero(analysis.Metrics["coverage"]),
 		PipelineId:  "",
 	}); errcc != nil {
@@ -62,32 +65,48 @@ func (svc *Service) Execute(ctx context.Context, webhookData domain.SonarQubeWeb
 	}
 
 	report := &sonar.Report{
-		Status: sonar.AnalysisStatus(analysis.TaskId), // todo: fetch the real value from original task.status
+		Status: aggregateAnalysisStatus(&domain.SonarTaskDetails{Status: analysis.TaskStatus}), // todo: fetch the real value from original task.status
 		Analysis: sonar.Analysis{
 			Key:       analysis.AnalysisId,
 			Project:   webhookData.SonarProject.Key,
 			Branch:    webhookData.Branch.Name,
 			CommitSHA: webhookData.Branch.Commit.SHA,
 		},
+		QualityGate: aggregateQualityGateStatus(analysis.QualityGate.Status),
+		Measures:    sonar.Measures{},
+		Issues:      aggregateIssues(analysis.Issues),
+		ReportURL:   analysis.DashboardUrl,
 	}
 
-	markdownReport := svc.ReportInteractor.FormatMarkdown(*analysis)
-	mergeable := analysis.QualityGate.Status == "OK"
+	mergeable := slices.Contains([]string{"OK", "WARN"}, analysis.QualityGate.Status)
 
 	if er := svc.ReportRepository.SaveReport(ctx, report); er != nil {
 		logging.Error("The report have not saved")
 	}
 
-	reportMD := renderer.NewSonarReportRenderer().Render(report)
+	renderEngine, err := renderer.NewRenderEngine()
+	if err != nil {
+		logging.Error("unabled to run render engine")
+		return nil, err
+	}
 
-	fmt.Println(reportMD)
+	content, e := renderEngine.RenderString(ctx, render.Request{
+		Ref:    "embed://templates/report-2.md.tmpl",
+		Format: render.FormatMarkdown,
+		Data:   report,
+	})
+
+	if e != nil {
+		logging.Error("enable to compile report template", "error", e)
+		return nil, fmt.Errorf("unabled to compile template/render")
+	}
 
 	if webhookData.MergeRequest != nil {
 		if _, errmg := svc.GitlabInteractor.CreateOrUpdateMergeRequestComment(
 			ctx,
 			webhookData.GitLab.ProjectID,
 			strconv.Itoa(webhookData.MergeRequest.IID),
-			markdownReport,
+			content,
 			"",
 		); errmg != nil {
 			logging.Error("échec post commentaire GitLab", "mrIID", webhookData.MergeRequest.IID, "erreur", errmg)
@@ -126,4 +145,85 @@ func (svc *Service) getCommitSha(ctx context.Context, gitlabProjectId, mergeRequ
 		}
 		return ""
 	}(*mr), nil
+}
+
+func aggregateIssues(issues []sonar.Issue) sonar.IssueSummary {
+	if len(issues) == 0 {
+		return sonar.IssueSummary{}
+	}
+	var summary sonar.IssueSummary
+
+	for _, issue := range issues {
+
+		switch issue.Severity {
+		case sonar.SeverityBlocker:
+			summary.Blocker++
+		case sonar.SeverityCritical:
+			summary.Critical++
+		case sonar.SeverityMajor:
+			summary.Major++
+		case sonar.SeverityMinor:
+			summary.Minor++
+		case sonar.SeverityInfo:
+			summary.Info++
+		}
+
+		if !issue.IsNew {
+			continue
+		}
+
+		summary.NewIssues++
+
+		switch issue.Type {
+		case sonar.IssueBug:
+			summary.NewBugs++
+		case sonar.IssueCodeSmell:
+			summary.NewCodeSmells++
+		case sonar.IssueVulnerability:
+			summary.NewVulnerabilities++
+		}
+	}
+
+	// summary.NewIssues =
+
+	return summary
+}
+
+func aggregateAnalysisStatus(task *domain.SonarTaskDetails) sonar.AnalysisStatus {
+	switch task.Status {
+	case "SUCCESS":
+		return sonar.AnalysisSuccess
+	case "FAILED":
+		return sonar.AnalysisFailed
+	default:
+		return sonar.AnalysisStatus(task.Status)
+	}
+}
+
+func aggregateQualityGateStatus(status string) sonar.QualityGateStatus {
+	switch status {
+	case "SUCCESS", "OK":
+		return sonar.QualityGatePassed
+	case "FAILED", "ERROR":
+		return sonar.QualityGateFailed
+	case "WARN":
+		return sonar.QualityGateWARNED
+	default:
+		return sonar.QualityGateUnknown
+	}
+}
+
+func buildReportURL(
+	analysis *sonar.Analysis,
+) string {
+
+	if analysis.Project == "" {
+		return ""
+	}
+
+	return fmt.Sprintf(
+		"%s/dashboard?id=%s",
+		analysis.Branch,
+		analysis.Project,
+	)
 }

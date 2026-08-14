@@ -78,7 +78,6 @@ func NewVersionCommand() *cobra.Command {
 			fmt.Printf("Version: %s\n", Version)
 			fmt.Printf("Commit: %s\n", Commit)
 			fmt.Printf("Built: %s\n", Date)
-
 			fmt.Println(info.ToString())
 		},
 	}

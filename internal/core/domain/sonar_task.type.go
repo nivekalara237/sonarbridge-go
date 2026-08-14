@@ -1,5 +1,7 @@
 package domain
 
+import "sonarbridge-go/internal/core/domain/sonar"
+
 /**
 export interface SonarQubeTask {
     id: string;
@@ -17,6 +19,7 @@ export interface SonarQubeTask {
 */
 
 type TaskStatus string
+
 type SonarTaskDetails struct {
 	Id              string
 	Type            string
@@ -65,4 +68,15 @@ type AnalysisDetails struct {
 	TotalIssues int
 	NewIssues   int
 	TaskId      string
+	TaskStatus  TaskStatus
+	Issues      []sonar.Issue
 }
+
+const (
+	TASK_SUCCESS     TaskStatus = "SUCCESS"
+	TASK_FAILED      TaskStatus = "FAILED"
+	TASK_PENDING     TaskStatus = "PENDING"
+	TASK_IN_PROGRESS TaskStatus = "IN_PROGRESS"
+	TASK_CANCELED    TaskStatus = "CANCELED"
+	TASK_UNKNOWN     TaskStatus = "UNKNOWN"
+)

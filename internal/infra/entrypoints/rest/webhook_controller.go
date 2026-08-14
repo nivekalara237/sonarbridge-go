@@ -2,7 +2,6 @@ package rest
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"sonarbridge-go/internal/core/domain"
 	"sonarbridge-go/internal/core/usecase"
@@ -28,29 +27,28 @@ func (useCase *WebhookHandler) Handler(writer http.ResponseWriter, request *http
 	}
 
 	var payload dto.WebhookRequestDto
-	decoder := json.NewDecoder(request.Body)
-	// decoder.DisallowUnknownFields()
 
-	if err := decoder.Decode(&payload); err != nil {
-		logging.Error("payload invalide", "error", err)
+	if err := httpx.GetRequestBody[dto.WebhookRequestDto](request, &payload); err != nil {
 		return httpx.ErrBadRequest
 	}
-	logging.Info("payload", payload)
 
 	logging.Info("webhook reçu",
-		"project", payload.SonarProject.Key,
-		"mrIID", payload.MergeRequest.IID,
-		"branch", payload.GitLab.Branch,
+		"Sonar Project Key", payload.SonarProject.Key,
+		"GitlabMergeRequestIID", payload.MergeRequest.IID,
+		"BranchName", payload.GitLab.Branch,
+		"SonarTaskId", payload.TaskID,
 	)
 
 	// r.Context() : annulé automatiquement si le client HTTP (GitLab-CI) coupe la connexion.
 	// On ajoute une marge de sécurité de 15s pour les appels sortants vers Sonar.
-	ctx, cancel := context.WithTimeout(request.Context(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(request.Context(), 10*time.Second)
 	defer cancel()
+
+	// reqID := middleware.RequestIDFrom(ctx)
 
 	response, err := useCase.service.Execute(ctx, domain.SonarQubeWebhookPayload{
 		TaskID: &payload.TaskID,
-		Status: "",
+		Status: domain.WebhookStatus(payload.TaskStatus),
 		SonarProject: domain.Project{
 			Key: payload.SonarProject.Key,
 		},

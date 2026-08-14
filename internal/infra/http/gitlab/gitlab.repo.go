@@ -41,7 +41,6 @@ func (inter *Interactor) createHttpClient(ciToken string) (*http.Client, error) 
 }
 
 func (inter *Interactor) CreateCommitStatus(ctx context.Context, projectId, sha, ciToken string, statusData domain.GitlabCommitStatus) (any, error) {
-
 	logging.Info("Creating commit status", "sha", sha)
 	httpClient, err := inter.createHttpClient(ciToken)
 	if err != nil {
@@ -70,7 +69,7 @@ func (inter *Interactor) CreateCommitStatus(ctx context.Context, projectId, sha,
 		return nil, err0
 	}
 
-	logging.Info("created commit status for", "sha", sha, "response", response)
+	logging.Info("created commit status for", "sha", sha)
 
 	return response, nil
 }
@@ -99,7 +98,8 @@ func (inter *Interactor) CreateOrUpdateMergeRequestComment(ctx context.Context, 
 	var existingComment *NoteResponse
 	if notesResponse != nil {
 		for _, note := range notesResponse {
-			if strings.Contains(note.Body, "SonarQube Analysis Report") && !note.System {
+			// SonarQube Analysis
+			if (strings.Contains(note.Body, "SonarQube Analysis") || strings.Contains(note.Body, "Rapport SonarQube")) && !note.System {
 				existingComment = &note
 				break
 			}
@@ -117,19 +117,18 @@ func (inter *Interactor) CreateOrUpdateMergeRequestComment(ctx context.Context, 
 		)
 		logging.Info("Deleted existing sticky comment")
 		if errdel != nil {
-			logging.Info("échec de suppression du dernier commentaire type Analyse Sonar (commit note)", "commentId", existingComment.ID)
+			logging.Warn("échec de suppression du dernier commentaire type Analyse Sonar (commit note)", "commentId", existingComment.ID)
 			return nil, errdel
 		}
 
 		response, errc := createNewComment(ctx, httpClient, projectId, mergeRequestId, comment)
 
 		if errc != nil {
-			logging.Info("échec de création d'un nouveau commentaire Analyse Sonar (commit note)", "commentId", existingComment.ID)
+			logging.Warn("échec de création d'un nouveau commentaire Analyse Sonar (commit note)", "commentId", existingComment.ID)
 			return nil, errc
 		}
-		logging.Info("spin up existing comment on MR !", mergeRequestId)
+		logging.Info("spin up existing comment on MR !", "iid", mergeRequestId)
 		return toDomain(*response), nil
-
 	}
 
 	resp, _ := createNewComment(ctx, httpClient, projectId, mergeRequestId, comment)
@@ -151,7 +150,7 @@ func (inter *Interactor) GetMergeRequest(ctx context.Context, projectId, mergeRe
 		nil,
 		&response,
 	); err0 != nil {
-		logging.Error("Error getting MR","mrIID", mergeRequestId, err0)
+		logging.Error("Error getting MR", "mrIID", mergeRequestId, err0)
 		return nil, err0
 	}
 
@@ -189,7 +188,7 @@ func createNewComment(ctx context.Context, httpClient *http.Client, projectId, m
 		&response,
 	)
 	if err != nil {
-		logging.Info("échec création du commentaire (commit note)", "mrIId", mergeRequestId, err)
+		logging.Warn("échec création du commentaire (commit note)", "mrIId", mergeRequestId, err)
 		return nil, err
 	}
 	logging.Info("created new comment on MR !", "mrIID", mergeRequestId)

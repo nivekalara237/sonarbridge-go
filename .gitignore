@@ -5,3 +5,9 @@ go.sum
 
 /bin/
 
+/devops/
+
+*feature*.md
+
+
+frontend

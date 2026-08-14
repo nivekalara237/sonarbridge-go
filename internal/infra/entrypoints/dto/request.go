@@ -1,10 +1,11 @@
 package dto
 
 type WebhookRequestDto struct {
-	TaskID       string        `json:"taskId"`
+	TaskID       string        `json:"taskId,omitempty"`
+	TaskStatus   string        `json:"taskStatus,omitempty"`
 	SonarProject SonarProject  `json:"sonarProject"`
 	GitLab       Gitlab        `json:"gitlab"`
-	MergeRequest *MergeRequest `json:"mergeRequest"`
+	MergeRequest *MergeRequest `json:"mergeRequest,omitempty"`
 }
 
 type SonarProject struct {
@@ -13,9 +14,9 @@ type SonarProject struct {
 
 type Gitlab struct {
 	ProjectID string  `json:"projectId"`
-	CIToken   *string `json:"ciToken"`
+	CIToken   *string `json:"ciToken,omitempty"`
 	Branch    string  `json:"branchName"`
-	BranchUrl *string `json:"branchUrl"`
+	BranchUrl *string `json:"branchUrl,omitempty"`
 	CommitSha string  `json:"commitSha"`
 }
 

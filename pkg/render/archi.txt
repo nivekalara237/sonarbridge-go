@@ -1,0 +1,22 @@
+Request{Ref, Format, Data}
+        │
+        ▼
+   Engine.Render
+        │
+        ├──► Cache.Get(key) ──── hit ──┐
+        │                               │
+        └── miss                        │
+             │                          │
+             ▼                          │
+        Loader.Load(ref)                │
+             │                          │
+             ▼                          │
+        Compiler.Compile                │
+             │                          │
+             ├──► Cache.Set             │
+             │                          │
+             ▼                          ▼
+        Registry.Resolve(format) ──► Renderer
+                                        │
+                                        ▼
+                                 Template.Execute(w, data)

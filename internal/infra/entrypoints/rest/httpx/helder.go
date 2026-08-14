@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"sonarbridge-go/internal/logging"
 )
 
 func WriteJSON(w http.ResponseWriter, status int, v any) {
@@ -34,4 +35,14 @@ func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 		Error:     apiErr,
 		RequestID: w.Header().Get("X-Request-ID"),
 	})
+}
+
+func GetRequestBody[T any](r *http.Request, bodyOutput *T) error {
+	// var payload *T
+	decoder := json.NewDecoder(r.Body)
+	if err := decoder.Decode(&bodyOutput); err != nil {
+		logging.Warn("invalid payload from http.request", "error", err)
+		return err
+	}
+	return nil
 }

@@ -1,0 +1,101 @@
+# {{ gateIcon .QualityGate.Status }} Rapport SonarQube — {{ .Project.Name }}
+
+> Généré le {{ .GeneratedAt.Format "02/01/2006 à 15:04" }} · [Dashboard]({{ .Project.URL }})
+
+## Quality Gate
+
+**Statut : {{ .QualityGate.Status }}**
+{{- with .QualityGate.Period }}
+{{- if .Parameter }}
+Nouveau code évalué par rapport à `{{ .Parameter }}` ({{ .Mode }}).
+{{- end }}
+{{- end }}
+{{- if .QualityGate.Ignored }}
+
+⚠️ Certaines conditions ont été ignorées sur cette analyse.
+{{- end }}
+
+| Condition | Attendu | Mesuré | |
+|---|---|---|:-:|
+{{- range .QualityGate.Conditions }}
+| {{ .Label }} | {{ .Operator }} {{ .Threshold }} | {{ .Actual }} | {{ if .Passed }}✅{{ else }}❌{{ end }} |
+{{- end }}
+
+{{- with .QualityGate.Failed }}
+
+### Conditions en échec
+
+{{- range . }}
+- **{{ .Label }}** — mesuré `{{ .Actual }}`, seuil `{{ .Operator }} {{ .Threshold }}`
+{{- end }}
+{{- end }}
+## Nouveau code
+
+| Métrique | Valeur |
+|---|---|
+| Couverture | {{ pct .NewCode.Coverage }} {{ bar .NewCode.Coverage 20 }} |
+| Duplication | {{ pct .NewCode.Duplication }} |
+| Issues | {{ .NewCode.Violations }} |
+| Bugs | {{ .NewCode.Bugs }} |
+| Vulnérabilités | {{ .NewCode.Vulnerabilities }} |
+| Code smells | {{ .NewCode.CodeSmells }} |
+| Hotspots | {{ .NewCode.Hotspots }} |
+| Note de revue sécurité | {{ .NewCode.SecurityRating }} |
+
+## Code global
+
+| Métrique | Valeur |
+|---|---|
+| Lignes de code | {{ .Overall.Ncloc }} |
+| Couverture | {{ pct .Overall.Coverage }} {{ bar .Overall.Coverage 20 }} |
+| Duplication | {{ pct .Overall.Duplication }} |
+| Bugs | {{ .Overall.Bugs }} |
+| Vulnérabilités | {{ .Overall.Vulnerabilities }} |
+| Code smells | {{ .Overall.CodeSmells }} |
+| Hotspots (revus) | {{ .Overall.Hotspots }} ({{ pct .Overall.HotspotsReviewed }}) |
+| Note de revue sécurité | {{ .Overall.SecurityRating }} |
+| Complexité cyclomatique | {{ .Overall.Complexity }} |
+| Complexité cognitive | {{ .Overall.CognitiveCplx }} |
+
+## Issues
+
+**{{ .Issues.Total }} issue(s) ouverte(s)** — dette estimée : {{ minutes .Issues.EffortMin }}
+
+{{- with .Issues.BySeverity }}
+
+### Par sévérité
+
+{{ range . }}- {{ severityIcon .Label }} **{{ .Label }}** — {{ .Count }}
+{{ end }}
+{{- end }}
+
+{{- with .Issues.ByType }}
+### Par type
+
+{{ range . }}- {{ typeIcon .Label }} **{{ .Label }}** — {{ .Count }}
+{{ end }}
+{{- end }}
+
+{{- with .Issues.TopRules }}
+### Règles les plus déclenchées
+
+| Règle | Occurrences |
+|---|---:|
+{{- range . }}
+| `{{ .Label }}` | {{ .Count }} |
+{{- end }}
+{{- end }}
+
+{{- with .Issues.Blocking }}
+
+### Détail
+
+{{- range . }}
+- {{ severityIcon .Severity }} `{{ .Rule }}` — [{{ .Path }}:{{ .Line }}]({{ .URL }})
+  {{ .Message }}{{ if .Effort }} _(effort : {{ .Effort }})_{{ end }}
+{{- end }}
+{{- end }}
+{{- if eq .Issues.Total 0 }}
+
+Aucune issue ouverte. 🎉
+{{- end }}

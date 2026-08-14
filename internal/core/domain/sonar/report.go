@@ -5,6 +5,7 @@ type QualityGateStatus string
 const (
 	QualityGatePassed  QualityGateStatus = "PASSED"
 	QualityGateFailed  QualityGateStatus = "FAILED"
+	QualityGateWARNED  QualityGateStatus = "WARNING"
 	QualityGateUnknown QualityGateStatus = "UNKNOWN"
 )
 
@@ -45,6 +46,7 @@ type IssueSummary struct {
 	Minor              int
 	Info               int
 	NewIssues          int
+	NewCodeSmells      int
 	NewBugs            int
 	NewVulnerabilities int
 }

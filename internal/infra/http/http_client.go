@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sonarbridge-go/internal/logging"
 	"strings"
 	"time"
 )
@@ -19,9 +20,20 @@ type IClientHttp interface {
 
 type ClientType string
 
+type OptionParamItem struct {
+	Key   string
+	Value any
+}
+type Options struct {
+	Params      []OptionParamItem
+	QueryParams []OptionParamItem
+	Headers     []OptionParamItem
+}
+
 const (
 	gitlab    ClientType = "gitlab"
 	sonarqube ClientType = "sonar"
+	bitbucket ClientType = "bb"
 )
 
 type Client struct {
@@ -111,6 +123,10 @@ func (c *Client) Post(ctx context.Context, path string, params url.Values, paylo
 
 	if c.clientFor == sonarqube {
 		req.SetBasicAuth(c.token, "")
+	}
+
+	if c.clientFor == bitbucket {
+		logging.Warn("no client is implemented for Bitbucket")
 	}
 
 	resp, err := c.httpClient.Do(req)

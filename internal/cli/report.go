@@ -2,13 +2,12 @@ package cli
 
 import (
 	"fmt"
-	"sonarbridge-go/internal/core/usecase"
 	"sonarbridge-go/internal/logging"
 
 	"github.com/spf13/cobra"
 )
 
-func NewReportCommand(svc *usecase.Service, cliCtx *Context) *cobra.Command {
+func NewReportCommand(cliCtx *CliContext) *cobra.Command {
 	reportCommand := &cobra.Command{
 		Use:   "report",
 		Short: "Display SonarQube Analysis as --format=html|md|text|json|yaml|xml",

@@ -22,7 +22,7 @@ const (
 type Issue struct {
 	Key       string
 	Rule      string
-	Severity  IssueType
+	Severity  IssueSeverity
 	Component string
 	Project   string
 	Line      *int
