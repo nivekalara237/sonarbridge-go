@@ -1,4 +1,4 @@
-```markdown
+
 # Go HTTP Client
 
 A flexible and feature-rich HTTP client for Go, built on top of `net/http`. It provides a clean API for making HTTP requests with support for retries, caching, multipart forms, query parameters, custom headers, and robust error handling.
@@ -21,10 +21,8 @@ A flexible and feature-rich HTTP client for Go, built on top of `net/http`. It p
 ## Installation
 
 ```bash
-go get github.com/yourusername/httpclient
+go get github.com/nivekalara237/httpclient
 ```
-
-Replace `github.com/yourusername/httpclient` with your actual module path.
 
 ## Quick Start
 
