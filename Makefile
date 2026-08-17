@@ -1,6 +1,6 @@
 APP=sonarbrige
 VERSION ?= 1.0.2
-COMMIT := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev))
+COMMIT := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 DATE := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 PKG_VERSION := sonarbridge-go/internal/build
 

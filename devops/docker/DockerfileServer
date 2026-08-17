@@ -23,8 +23,8 @@ COPY --from=builder /app/bin/sonarbridge-server /usr/local/bin/sonarbridge-serve
 
 USER sbridge
 
-EXPOSE 9045
+EXPOSE 9405
 
 ENTRYPOINT ["sonarbridge-server"]
 
-CMD ["serve", "--port=9045"]
+CMD ["serve", "--port=9405"]

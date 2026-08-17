@@ -34,7 +34,7 @@ deploy:
 
 	@echo ">>> 2. Création des ConfigMap et Secret..."
 	kubectl kustomize $(OVERLAYS) | kubectl apply -f - --selector="deploy-order=0"
-	kubectl create secret generic sonarbridge-external-ca-files -n ${NAMESPACE} --from-file=gilab.cavom.lan.crt=${GITLAB_CA_ROOT} --from-file=gilab.cavom.lan.crt=${SONAR_CA_ROOT}
+	kubectl create secret generic sonarbridge-external-ca-files -n ${NAMESPACE} --from-file=gilab.cavom.lan.crt=${GITLAB_CA_ROOT} --from-file=sonarqube.cavom.lan.crt=${SONAR_CA_ROOT} --dry-run=client -oyaml | kubectl apply -f -
 
 	@echo ">>> 3. Application complète..."
 	kubectl kustomize $(OVERLAYS) | kubectl apply -f - --selector="deploy-order!=0"
