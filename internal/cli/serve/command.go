@@ -7,10 +7,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewServeCommand(mainFunc func(port int, host string)) *cobra.Command {
-	cfg := configs.Load()
+func NewServeCommand(cfg *configs.Config, mainFunc func(port int, host string)) *cobra.Command {
 
-	cmd := &cobra.Command{
+	rootCmd := &cobra.Command{
 		Use:     "serve",
 		Short:   "Satrt the HTTP Server",
 		Aliases: []string{"run", "start"},
@@ -24,9 +23,9 @@ func NewServeCommand(mainFunc func(port int, host string)) *cobra.Command {
 		},
 	}
 
-	cmd.Flags().String("port", cfg.Port, "Port to listen on")
-	cmd.Flags().String("host", cfg.Host, "Host to launch on")
-	cmd.Flags().String("env", cfg.Env, "The environment to run on")
+	rootCmd.Flags().String("port", cfg.Port, "Port to listen on")
+	rootCmd.Flags().String("host", cfg.Host, "Host to launch on")
+	rootCmd.Flags().String("env", cfg.Env, "The environment to run on")
 
-	return cmd
+	return rootCmd
 }

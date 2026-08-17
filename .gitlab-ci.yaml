@@ -1,0 +1,242 @@
+stages:
+  - build
+  - scan
+  - release
+  - docker
+  - deploy
+
+variables:
+  GO_VERSION: "1.26"
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: "/certs"
+  CONTAINER_IMAGE: ${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA}
+  CONTAINER_IMAGE_LATEST: ${CI_REGISTRY_IMAGE}:latest
+  CLI_IMAGE: "$CI_REGISTRY_IMAGE/sonarbridge-server"
+  SERVER_IMAGE: "$CI_REGISTRY_IMAGE/sonarbridge-cli"
+  ENV: "dev"  # Peut-être "dev" ou "prod", à configurer dans les variables CI/CD
+
+cache:
+  paths:
+    - bin/
+  key: ${CI_COMMIT_REF_SLUG}
+  policy: pull-push
+
+.rule-for-build-test: &rules-build-tests
+  rules:
+    - if: $CI_COMMIT_MESSAGE =~ /.*\[release-version\].*/
+      when: never
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+    - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH
+    - when: never
+      # || $CI_COMMIT_REF_NAME == 'develop' ||
+      # $CI_COMMIT_REF_NAME =~ /^(feature|features|tech|bugfix|release)\//
+
+build-server-and-cli:
+  <<: *rules-build-tests
+  stage: build
+  image: golang:${GO_VERSION}-alpine
+  before_script:
+    - apk add --no-cache make
+  script:
+    - make tidy
+    - make build
+    - make build-cli
+  artifacts:
+    name: "sonarbridge-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - bin/sonarbridge-server-dev
+      - bin/sonarbridge-cli-dev
+    expire_in: 10 min
+
+scan-dependencies:
+  <<: *rules-build-tests
+  image:
+    name: aquasec/trivy:latest
+    entrypoint: [""]
+  stage: scan
+  needs:
+    - build-server-and-cli
+  script:
+    - trivy fs --scanners vuln --severity HIGH,CRITICAL --exit-code 1 .
+scan-secrets:
+  <<: *rules-build-tests
+  image:
+    name: aquasec/trivy:latest
+    entrypoint: [""]
+  stage: scan
+  needs:
+    - build-server-and-cli
+  script:
+    - trivy fs --scanners secret --exit-code 1 .
+
+
+release:snapshot:
+  stage: release
+  image: alpine:latest
+  needs:
+    - scan-dependencies
+    - scan-secrets
+  artifacts:
+    reports:
+      dotenv: release.env
+    paths:
+      - release.env
+    expire_in: 1 hour
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+    # - if: $CI_COMMIT_MESSAGE !~ /.*\[release-version\].*/
+  before_script:
+    - apk add --no-cache jq bash
+  script:
+    - | 
+      if [ -z "$CI_COMMIT_BRANCH" ]; then
+        echo "Not a branch pipeline, skipping snapshot."
+        exit 0
+      fi
+    - CURRENT_VERSION=$(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+    - echo "VERSION=${CURRENT_VERSION}-SNAPSHOT" >> release.env
+    - echo "COMMIT=$CI_COMMIT_SHA" >> release.env
+    - echo "DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> release.env
+
+release:official:
+  stage: release
+  image:
+    name: alpine/git:latest
+    entrypoint: [ "" ]
+  needs:
+    - scan-dependencies
+    - scan-secrets
+  rules:
+    - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH
+      when: always
+  before_script:
+    - printenv
+    - apk add --no-cache jq openssh-client bash
+    - eval $(ssh-agent -s)
+    - cat $SSH_DEPLOY_PRIVATE_KEY  | tr -d '\r' | ssh-add - > /dev/null
+    - mkdir -p ~/.ssh && chmod 700 ~/.ssh
+    - echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config
+    - git config --global http.sslVerify false
+    - git config --global user.email "gitlabci@cavom.fr"
+    - git config --global user.name "Gitlab CI"
+    - chmod +x ./devops/scripts/inc_version.sh
+  script:
+    - |
+      set -e
+      source ./devops/scripts/inc_version.sh
+      
+      CURRENT_VERSION=$(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+      
+      # Déterminer le type de version selon l'environnement
+      if [ "$ENV" = "prod" ]; then
+        NEW_VERSION=$(increment_version "$CURRENT_VERSION" minor)
+        VERSION_TYPE="minor"
+      else
+        NEW_VERSION=$(increment_version "$CURRENT_VERSION" patch)
+        VERSION_TYPE="patch"
+      fi
+      
+      echo "Current version: $CURRENT_VERSION"
+      echo "New version: $NEW_VERSION ($VERSION_TYPE)"
+      printf 'VERSION=%s\n' "$NEW_VERSION" > release.env
+      
+      # Maj de version.json
+      sed -i "s/\"version\": \"$CURRENT_VERSION\"/\"version\": \"$NEW_VERSION\"/" app.json
+      
+      RELEASE="true" #todo: remove asap
+      
+      if [ "$CI_COMMIT_REF_NAME" = "main" ] || [ "$CI_COMMIT_REF_NAME" = "master" ] || [ "$RELEASE" = "true" ]; then
+        SSH_REMOTE="ssh://git@gitlab.cavom.lan:10022/portail/sonarbridge-go.git"
+        ## git checkout -B $CI_COMMIT_REF_NAME
+        git add app.json
+        git commit -m "Bump version to $NEW_VERSION [release-version] [skip ci]"
+        git tag -d $(git tag -l "v$CURRENT_VERSION") 2>/dev/null || true
+        git tag -a "v$NEW_VERSION" -m "Release version $NEW_VERSION"
+        git push "$SSH_REMOTE" HEAD:$CI_COMMIT_REF_NAME
+        git push --tags "$SSH_REMOTE"
+      fi
+  artifacts:
+    reports:
+      dotenv: release.env
+
+docker:build-push:
+  stage: docker
+  image: docker:20.10.16
+  services:
+    - docker:20.10.16-dind
+  needs:
+    - job: release:snapshot
+      artifacts: true
+      optional: true
+    - job: release:official
+      artifacts: true
+      optional: true
+  before_script:
+    - printenv
+    - apk --update add jq
+    - export CONTAINER_IMAGE_NAME=$(cat app.json | jq -r .name)
+  script:
+    - echo "$REGISTRY_PASS" | docker login -u "$REGISTRY_USER" $REGISTRY_URL --password-stdin
+    - docker buildx build --tag "$REGISTRY_URL/portal/${CONTAINER_IMAGE_NAME}-server:${VERSION}" --build-arg NODE_ENV=${ENV:-dev} --push -f devops/docker/DockerfileServer .
+    - docker buildx build --tag "$REGISTRY_URL/portal/${CONTAINER_IMAGE_NAME}-cli:${VERSION}" --build-arg NODE_ENV=${ENV:-dev} --push -f devops/docker/DockerfileCLI .
+    - |
+      if [[ "$CI_COMMIT_REF_NAME" == "$CI_DEFAULT_BRANCH" ]]; then
+        docker tag "$REGISTRY_URL/portal/${CONTAINER_IMAGE_NAME}-server:${VERSION}" "$REGISTRY_URL/portal/${CONTAINER_IMAGE_NAME}-server:latest"
+        docker push "$REGISTRY_URL/portal/${CONTAINER_IMAGE_NAME}-server:latest"
+        docker tag "$REGISTRY_URL/portal/${CONTAINER_IMAGE_NAME}-cli:${VERSION}" "$REGISTRY_URL/portal/${CONTAINER_IMAGE_NAME}-cli:latest"
+        docker push "$REGISTRY_URL/portal/${CONTAINER_IMAGE_NAME}-cli:latest"
+      fi
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+    - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH
+
+.deploy-k8s-base: &deploy_base
+  stage: deploy
+  image: dtzar/helm-kubectl
+  before_script:
+    - apk add make
+    - export ENV=${ENV:-prod}
+    - kubectl config set-cluster cavom_kube --server=${KUBE_URL}
+    - kubectl config set-context --current --namespace=${NAMESPACE_NAME}
+    - kubectl create secret docker-registry gitlab-registry --docker-server=$REGISTRY_URL --docker-username=$REGISTRY_USER --docker-password=$REGISTRY_PASS --docker-email="$GITLAB_USER_EMAIL" -o yaml --dry-run=client | kubectl apply -f -
+  tags:
+    - docker
+  needs:
+    - job: docker:build-push
+    - job: release:snapshot
+      artifacts: true
+      optional: true
+    - job: release:official
+      artifacts: true
+      optional: true
+  script:
+    - printenv
+    - echo "the version to deploy is $VERSION"
+    - cd devops
+    - make deploy ENV=${ENV} IMAGE_TAG=$VERSION
+
+deploy:dev:
+  <<: *deploy_base
+  variables:
+    NAMESPACE_NAME: sonarbridge-dev
+    ENV: dev
+  environment:
+    name: dev
+    url: https://sonarbridge.cavom.lan
+    kubernetes:
+      namespace: sonarbridge-dev
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+
+deploy:prod:
+  <<: *deploy_base
+  variables:
+    NAMESPACE_NAME: sonarbridge-prod
+    ENV: prod
+  environment:
+    name: prod
+    url: https://sonarbridge.cavom.lan
+    kubernetes:
+      namespace: sonarbridge-prod
+  rules:
+    - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH

@@ -25,7 +25,7 @@ tidy:
 	go mod tidy
 
 build-server:
-	go build -o ${BIN_DIR}/sonarbridge-server ./cmd/server
+	go build -o ${BIN_DIR}/sonarbridge-server-dev ./cmd/server
 
 build-server-prod:
 	go build \

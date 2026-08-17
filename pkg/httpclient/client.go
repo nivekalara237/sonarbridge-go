@@ -70,7 +70,9 @@ func NewClientHttp(opts ...Option) *Client {
 		cache: nil,
 	}
 	for _, opt := range opts {
-		opt(c)
+		if opt != nil {
+			opt(c)
+		}
 	}
 	return c
 }

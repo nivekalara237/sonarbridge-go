@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sonarbridge-config
+data:
+  #  PORT: 80
+  NODE_ENV: "${ENV}"
+  LOG_LEVEL: "${ENV == 'prod' ? 'info' : 'debug'}"
+  CORS_ORIGIN: "${ENV == 'prod' ? 'https://sonarbridge.cavom.lan' : '*'}"
+
+
+  PORT: "9045"
+  ENV: "dev"
+  GITLAB_URL: "https://gitlab.cavom.lan/api/v4"
+  ## your-gitlab-access-token, or get the GITLAB_TOKEN in pipeline ENV if it is CI
+  GITLAB_TOKEN: "glpat-xwRmChemzuWfKhyzLMuV"
+  #your-gitlab-webhook-token. You can got it by hinting `openssl rand -hex 32` and use the output
+  GITLAB_WEBHOOK_TOKEN: "7a5dd795327d00844d7e0c5c7dc682a2a1ec4521d1ea989fd1d20fd71aab9cfd"
+
+  # SonarQube Configuration
+  SONARQUBE_URL: "https://sonarqube.cavom.lan/api"
+  SONARQUBE_TOKEN: "squ_0740303005c32863b032cc84fc2c6b8651d59e88"
+  SONAR_EDITION: "ce"
+
+  # Security
+  ## your-webhook-secret-key
+  WEBHOOK_SECRET: "112233445566778899z"

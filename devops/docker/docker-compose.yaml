@@ -1,0 +1,34 @@
+services:
+  sonar-bridge-server:
+    build:
+      context: ../..
+      dockerfile: DockerfileServer
+    ports:
+      - "9000:9045"
+    env_file:
+      - ../../.env
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--quiet", "http://localhost:9000/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+    volumes:
+      - ./certs/sonarqube.cavom.lan.crt:/certs/sonarqube.cavom.lan.crt:ro
+      - ./certs/gitlab.cavom.lan.crt:/certs/gitlab.cavom.lan.crt:ro
+    environment:
+      SONAR_CA_CERT: /certs/sonarqube.cavom.lan.crt
+      GITLAB_CA_CERT: /certs/gitlab.cavom.lan.crt
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M

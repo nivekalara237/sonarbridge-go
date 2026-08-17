@@ -82,11 +82,16 @@ type GenerateSonarReportUseCase struct {
 	baseURL string
 }
 
-func NewGenerateSonarReport(baseUrl string) *GenerateSonarReportUseCase {
+func NewGenerateSonarReport(baseUrl string, opts map[string]any) *GenerateSonarReportUseCase {
+	var tlsOpt httpclient.Option
+	if certFile, ok := opts["server-cert-file"]; ok {
+		tlsOpt = httpclient.WithTLSCACertFile(certFile.(string))
+	}
 	client := httpclient.NewClientHttp(
 		httpclient.WithBaseURL(baseUrl),
 		httpclient.WithTimeout(60*time.Second),
 		httpclient.WithRetry(3, 1*time.Second),
+		tlsOpt,
 	)
 
 	return &GenerateSonarReportUseCase{

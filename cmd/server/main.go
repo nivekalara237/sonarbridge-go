@@ -48,14 +48,15 @@ func Execute() {
 }
 
 func init() {
-	rootCmd.AddCommand(serve.NewServeCommand(func(port int, host string) {
+
+	cfg := configs.Load()
+
+	rootCmd.AddCommand(serve.NewServeCommand(cfg, func(port int, host string) {
 
 		fmt.Println(banner)
 		fmt.Println()
 		fmt.Println(build.GetBuildInfo().ToServerString())
 		fmt.Println()
-
-		cfg := configs.Load()
 
 		if err := logging.InitServer(*cfg); err != nil {
 			log.Fatal(err)
@@ -101,23 +102,6 @@ func init() {
 
 		log.Printf("listening on %s", serverOne.Addr)
 
-		/*serverDocs := &http.Server{
-			Addr: ":4044",
-			Handler: middleware2.NewBuilder(muxDocs).
-				Add(middleware2.HeaderAppInfo).
-				Add(middleware2.SecurityHeadersMiddleware).
-				Add(middleware2.LoggingRequestMiddleware).
-				Add(middleware2.RateLimite).
-				Build(),
-			ReadTimeout:  10 * time.Second,
-			WriteTimeout: 20 * time.Second,
-			IdleTimeout:  120 * time.Second,
-			BaseContext: func(listener net.Listener) context.Context {
-				ctx = context.WithValue(ctx, KeyServerAddr, listener.Addr().String())
-				return ctx
-			},
-		}*/
-
 		go func() {
 			err := serverOne.ListenAndServe()
 
@@ -130,27 +114,6 @@ func init() {
 
 			defer cancelCtx()
 		}()
-
-		/*go func() {
-			err := serverDocs.ListenAndServe()
-
-			if errors.Is(err, http.ErrServerClosed) {
-				fmt.Printf("Server Docs closed\n")
-			} else if err != nil {
-				fmt.Printf("Error listening for server docs: %s\n", err)
-			}
-			defer cancelCtx()
-		}()*/
-
-		/*quit := make(chan os.Signal, 1)
-		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-
-		<-quit
-		fmt.Println("Server is shutting down...")
-
-		if err := serverOne.Shutdown(ctx); err != nil {
-			fmt.Printf("Server forced to shutdown: %s\n", err)
-		}*/
 
 		<-ctx.Done()
 	}))

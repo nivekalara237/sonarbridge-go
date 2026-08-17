@@ -111,6 +111,11 @@ func NewAnalyzeCommand(cliCtx *CliContext) *cobra.Command {
 
 			uc := usecase2.NewGenerateSonarReport(
 				cliCtx.serverUrl,
+				map[string]any{
+					"server-cert-file": cliCtx.serverCert,
+					"server-cert-key":  cliCtx.serverKey,
+					"config-file":      cliCtx.ConfigFile,
+				},
 			)
 
 			return uc.ExecuteSonarRequest(

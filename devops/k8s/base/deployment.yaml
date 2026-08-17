@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sonarbridge-deployment
+  labels:
+    type_app: backend
+spec:
+  selector:
+    matchLabels:
+      app: sonarbridge
+  replicas: 1
+  template:
+    metadata:
+      name: sonarbridge-pod
+      labels:
+        app: sonarbridge
+    spec:
+      imagePullSecrets:
+        - name: gitlab-registry
+      volumes:
+        - name: log-volume
+          hostPath:
+            path: /data/kube-data/portail/logs/${ENV}
+        - name: external-cert-file-gitlab
+          secret:
+            secretName: sonarbridge-external-ca-files
+      containers:
+        - name: sonarbridge-container
+          image: sonarbridge-container-image
+          imagePullPolicy: Always
+          # image: nexus.cavom.lan/portal/sonarbridge:latest
+          # image: docker.io/nivekaacom/sonarbridge:latest
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          envFrom:
+            - secretRef:
+                name: sonarbridge-secret
+            - configMapRef:
+                name: sonarbridge-config
+          env:
+            - name: SONAR_CA_CERT
+              value: /etc/sonarbridge/certs/sonarqube.cavom.lan.crt
+            - name: GITLAB_CA_CERT
+              value: /etc/sonarbridge/certs/gitlab.cavom.lan.crt
+          ports:
+            - containerPort: 9405
+          readinessProbe:
+            httpGet:
+              port: 9405
+              path: /healthz
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              port: 9405
+              path: /healthz
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          volumeMounts:
+            - mountPath: /data/kube-data/portail/logs/${ENV}/sonarbridge
+              name: log-volume
+            - mountPath: "/etc/sonarbridge/certs"
+              name: sonarbridge-external-ca-files
+              readOnly: true

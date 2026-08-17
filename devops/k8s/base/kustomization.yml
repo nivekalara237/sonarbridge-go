@@ -1,0 +1,31 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: $(NAMESPACE)
+
+resources:
+  - deployment.yaml
+  - service.yml
+  - ingressroute-http-traefik.yaml
+  - ingressroute-https-traefik.yaml
+  - middleware-redirect-https.yml
+
+images:
+  - name: sonarbridge-container-image
+    newName: nexus.cavom.lan/portal/sonarbridge-server
+    newTag: latest
+
+labels:
+  - pairs:
+      app: sonarbridge
+      tier: backend
+    includeSelectors: false
+
+configMapGenerator:
+  - name: sonarbridge-config
+    envs:
+      - configmap.env
+
+secretGenerator:
+  - name: sonarbridge-secret
+    envs:
+      - secret.env

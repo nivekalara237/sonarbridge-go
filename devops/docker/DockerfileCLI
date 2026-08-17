@@ -1,0 +1,23 @@
+FROM golang:1.26-alpine AS builder
+LABEL author="Kevin Lactio Kemta<kevin.lactio-kemta-ext@cavom.fr>"
+
+RUN apk add --no-cache make
+
+WORKDIR /app
+
+COPY ../../go.mod go.sum Makefile ./
+RUN go mod download
+
+COPY ../../.. .
+
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+    make build-cli-prod
+
+
+FROM scratch
+
+COPY --from=builder /app/bin/sonarbridge-cli /sonarbridgectl
+
+USER 65423:65423
+
+ENTRYPOINT ["/sonarbridgectl"]

@@ -4,11 +4,19 @@
 
 /bin/
 
-/devops/
+# /devops/
 
 *feature*.md
 
 
 frontend/
 
-Dockerfile*
+# Dockerfile*
+
+/internal/*.MD
+/internal/*.md
+/pkg/*.MD
+/pkg/*.md
+
+*.crt
+*.key
