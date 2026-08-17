@@ -28,8 +28,6 @@ cache:
     - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
     - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH
     - when: never
-      # || $CI_COMMIT_REF_NAME == 'develop' ||
-      # $CI_COMMIT_REF_NAME =~ /^(feature|features|tech|bugfix|release)\//
 
 build-server-and-cli:
   <<: *rules-build-tests
