@@ -20,3 +20,5 @@ frontend/
 
 *.crt
 *.key
+
+!devops/k8s/**/*.env

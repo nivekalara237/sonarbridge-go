@@ -21,15 +21,13 @@ spec:
         - name: log-volume
           hostPath:
             path: /data/kube-data/portail/logs/${ENV}
-        - name: external-cert-file-gitlab
+        - name: external-ca-files-vol
           secret:
             secretName: sonarbridge-external-ca-files
       containers:
         - name: sonarbridge-container
           image: sonarbridge-container-image
           imagePullPolicy: Always
-          # image: nexus.cavom.lan/portal/sonarbridge:latest
-          # image: docker.io/nivekaacom/sonarbridge:latest
           resources:
             requests:
               cpu: 100m
@@ -49,21 +47,25 @@ spec:
               value: /etc/sonarbridge/certs/gitlab.cavom.lan.crt
           ports:
             - containerPort: 9405
+#          livenessProbe:
+#            httpGet:
+#              path: /healthz
+#              port: 9405
+#            initialDelaySeconds: 10
+#            periodSeconds: 30
+#            timeoutSeconds: 5
+#            failureThreshold: 5
           readinessProbe:
             httpGet:
-              port: 9405
               path: /healthz
-            initialDelaySeconds: 15
-            periodSeconds: 10
-          livenessProbe:
-            httpGet:
               port: 9405
-              path: /healthz
             initialDelaySeconds: 5
-            periodSeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
           volumeMounts:
             - mountPath: /data/kube-data/portail/logs/${ENV}/sonarbridge
               name: log-volume
             - mountPath: "/etc/sonarbridge/certs"
-              name: sonarbridge-external-ca-files
+              name: external-ca-files-vol
               readOnly: true
