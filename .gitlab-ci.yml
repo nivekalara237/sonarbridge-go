@@ -88,7 +88,7 @@ release:snapshot:
   before_script:
     - apk add --no-cache jq bash
   script:
-    - CURRENT_VERSION=$(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+    - CURRENT_VERSION=$(shell git describe --tags --always --dirty 2>/dev/null || echo latest)
     - echo "VERSION=${CURRENT_VERSION}-SNAPSHOT" >> release.env
     - echo "COMMIT=$CI_COMMIT_SHA" >> release.env
     - echo "DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> release.env
@@ -120,7 +120,7 @@ release:official:
       set -e
       source ./devops/scripts/inc_version.sh
       
-      CURRENT_VERSION=$(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+      CURRENT_VERSION=$(shell git describe --tags --always --dirty 2>/dev/null || echo "1.0.0")
       
       # Déterminer le type de version selon l'environnement
       if [ "$ENV" = "prod" ]; then
