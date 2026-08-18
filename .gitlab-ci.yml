@@ -95,6 +95,8 @@ release:snapshot:
 
 release:official:
   stage: release
+  variables:
+    GIT_STRATEGY: clone
   image:
     name: alpine/git:latest
     entrypoint: [ "" ]
