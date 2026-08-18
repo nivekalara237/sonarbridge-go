@@ -55,8 +55,7 @@ scan-dependencies:
   needs:
     - build-server-and-cli
   script:
-    - echo "scanning...." #todo: recover the under line
-    # - trivy fs --scanners vuln --severity HIGH,CRITICAL --exit-code 1 .
+    - trivy fs --scanners vuln --severity HIGH,CRITICAL --exit-code 1 .
 scan-secrets:
   <<: *rules-build-tests
   image:
@@ -66,9 +65,7 @@ scan-secrets:
   needs:
     - build-server-and-cli
   script:
-    - echo "scanning...." #todo: recover the under line
-    # - trivy fs --scanners secret --exit-code 1 .
-
+    - trivy fs --scanners secret --exit-code 1 .
 
 release:snapshot:
   stage: release
@@ -107,7 +104,6 @@ release:official:
     - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH
       when: always
   before_script:
-    - printenv
     - apk add --no-cache jq openssh-client bash
     - eval $(ssh-agent -s)
     - cat $SSH_DEPLOY_PRIVATE_KEY  | tr -d '\r' | ssh-add - > /dev/null
@@ -169,19 +165,21 @@ docker:build-push:
       artifacts: true
       optional: true
   before_script:
-    - printenv
     - apk --update add jq
     - export CONTAINER_IMAGE_NAME=$(cat app.json | jq -r .name)
   script:
     - echo "$REGISTRY_PASS" | docker login -u "$REGISTRY_USER" $REGISTRY_URL --password-stdin
     - docker buildx build --tag "$REGISTRY_URL/portal/${CONTAINER_IMAGE_NAME}-server:${VERSION}" --build-arg NODE_ENV=${ENV:-dev} --push -f devops/docker/DockerfileServer .
     - docker buildx build --tag "$REGISTRY_URL/portal/${CONTAINER_IMAGE_NAME}-cli:${VERSION}" --build-arg NODE_ENV=${ENV:-dev} --push -f devops/docker/DockerfileCLI .
+    - docker buildx build --tag "$REGISTRY_URL/portal/${CONTAINER_IMAGE_NAME}-cli-distroless:${VERSION}" --build-arg NODE_ENV=${ENV:-dev} --push -f devops/docker/DockerfileDistrolessCLI .
     - |
       if [[ "$CI_COMMIT_REF_NAME" == "$CI_DEFAULT_BRANCH" ]]; then
         docker tag "$REGISTRY_URL/portal/${CONTAINER_IMAGE_NAME}-server:${VERSION}" "$REGISTRY_URL/portal/${CONTAINER_IMAGE_NAME}-server:latest"
         docker push "$REGISTRY_URL/portal/${CONTAINER_IMAGE_NAME}-server:latest"
         docker tag "$REGISTRY_URL/portal/${CONTAINER_IMAGE_NAME}-cli:${VERSION}" "$REGISTRY_URL/portal/${CONTAINER_IMAGE_NAME}-cli:latest"
         docker push "$REGISTRY_URL/portal/${CONTAINER_IMAGE_NAME}-cli:latest"
+        docker tag "$REGISTRY_URL/portal/${CONTAINER_IMAGE_NAME}-cli-distroless:${VERSION}" "$REGISTRY_URL/portal/${CONTAINER_IMAGE_NAME}-cli-distroless:latest"
+        docker push "$REGISTRY_URL/portal/${CONTAINER_IMAGE_NAME}-cli-distroless:latest"
       fi
   rules:
     - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
@@ -207,7 +205,6 @@ docker:build-push:
       artifacts: true
       optional: true
   script:
-    - printenv
     - echo "the version to deploy is $VERSION"
     - cd devops
     - make deploy ENV=${ENV} IMAGE_TAG=$VERSION SONAR_CA_ROOT=${SONAR_ROOTCA} GITLAB_CA_ROOT=${GITLAB_ROOTCA}
