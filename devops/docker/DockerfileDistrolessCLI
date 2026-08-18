@@ -14,14 +14,10 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
     make build-cli-prod
 
 
-FROM alpine:3.22
+FROM scratch
 
-RUN addgroup -S sbridge \
-    && adduser -S -G sbridge sbridge
+COPY --from=builder /app/bin/sonarbridge-cli /sonarbridgectl
 
-COPY --from=builder /app/bin/sonarbridge-cli /usr/local/bin/bridgectl
-RUN chmod +x /usr/local/bin/bridgectl
+USER 65423:65423
 
-USER sbridge
-
-ENTRYPOINT ["/usr/local/bin/bridgectl"]
+ENTRYPOINT ["/sonarbridgectl"]
