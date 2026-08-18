@@ -16,7 +16,8 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
 
 FROM alpine:3.22
 
-RUN addgroup -S sbridge \
+RUN apk add --no-cache ca-certificates jq \
+    && addgroup -S sbridge \
     && adduser -S -G sbridge sbridge
 
 COPY --from=builder /app/bin/sonarbridge-cli /usr/local/bin/bridgectl
@@ -24,4 +25,6 @@ RUN chmod +x /usr/local/bin/bridgectl
 
 USER sbridge
 
-ENTRYPOINT ["/usr/local/bin/bridgectl"]
+WORKDIR /workspace
+
+CMD ["/usr/local/bin/bridgectl"]
