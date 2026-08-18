@@ -118,7 +118,7 @@ release:official:
       set -e
       source ./devops/scripts/inc_version.sh
       
-      CURRENT_VERSION=$(shell git describe --tags --always --dirty 2>/dev/null || echo "1.0.0")
+      CURRENT_VERSION=$(cat app.json | jq -r .version)
       
       # Déterminer le type de version selon l'environnement
       if [ "$ENV" = "prod" ]; then
