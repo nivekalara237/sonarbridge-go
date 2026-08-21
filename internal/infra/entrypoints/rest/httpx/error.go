@@ -6,7 +6,7 @@ import (
 )
 
 type APIError struct {
-	Status  int    `json:"-"`
+	Status  int    `json:"statusCode"`
 	Code    string `json:"code"`
 	Message string `json:"message"`
 	Details any    `json:"details,omitempty"`
@@ -28,7 +28,11 @@ func (e *APIError) Wrap(err error) *APIError {
 }
 
 func New(status int, code, msg string, args ...any) *APIError {
-	return &APIError{Status: status, Code: code, Message: fmt.Sprintf(msg, args)}
+	m := msg
+	if len(args) > 0 {
+		m = fmt.Sprintf(msg, args)
+	}
+	return &APIError{Status: status, Code: code, Message: m}
 }
 
 var (

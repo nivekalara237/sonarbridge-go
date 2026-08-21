@@ -10,32 +10,24 @@ import (
 )
 
 func main() {
-	// cfg := configs.Load()
-
 	cfg := configs.Config{LogLevel: "error"}
-
 	if err := logging.InitCLI(cfg); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		_, _ = fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 
-	// app := bootstrap.NewApp(*cfg)
 	root := cli.NewRootCommand()
-
 	err := root.Execute()
-
 	if err == nil {
 		os.Exit(0)
 		return
 	}
 
 	var cliErr *cli.CLIError
-
 	if errors.As(err, &cliErr) {
-		fmt.Fprintln(os.Stderr, "Error:", cliErr)
-
+		_, _ = fmt.Fprintln(os.Stderr, "Error:", cliErr)
 		if cliErr.ShowUsage {
-			fmt.Fprintln(os.Stderr)
+			_, _ = fmt.Fprintln(os.Stderr)
 			if cliErr.Command != nil {
 				_ = cliErr.Command.Usage()
 			} else {
@@ -45,6 +37,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Fprintln(os.Stderr, "Error:", err)
+	_, _ = fmt.Fprintln(os.Stderr, "Error:", err)
 	os.Exit(1)
 }

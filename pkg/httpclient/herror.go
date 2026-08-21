@@ -9,6 +9,7 @@ import (
 type ClientError struct {
 	StatusCode int
 	Status     string
+	Message    string
 	Body       []byte
 }
 

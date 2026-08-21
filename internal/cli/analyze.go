@@ -25,7 +25,7 @@ type positionalArgs struct {
 
 const (
 	helpExample = `  # Analyze the main branch (outside of mr/pr)
-  sonarbridge-cli analyze my-project main --sonar-task-id=AYx123456 --sonar-project-key=my-quality-project --sever-shared-key=xxxx
+  sonarbridge-cli analyze my-project main --sonar-task-id=AYx123456 --sonar-project-key=my-quality-project --server-shared-key=xxxx
 
   # Analyze a Merge Request
   sonarbridge-cli analyze my-project feature/login \
@@ -33,7 +33,7 @@ const (
     --commit-sha=abc123 \
     --commit-url=https://gitlab.example.com/... \
     --ci-token=$CI_JOB_TOKEN \
-    --sever-shared-key=$CI_JOB_TOKEN \
+    --server-shared-key=$CI_JOB_TOKEN \
     --server-url=https://sonarbridge.cavom.lan \
     --server-cert=string-certificate.pem \
     --server-key=string-certificate.key \
@@ -54,7 +54,6 @@ func NewAnalyzeCommand(cliCtx *CliContext) *cobra.Command {
 		Short:   "Fetch SonarQube Analysis and create a MR/PR rapport message",
 		Long:    helpLongDescription,
 		Example: helpExample,
-		// Args:    cobra.ExactArgs(2),
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 2 {
 				return &CLIError{
@@ -70,7 +69,7 @@ func NewAnalyzeCommand(cliCtx *CliContext) *cobra.Command {
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 
-			fmt.Println("Executing analyse command...")
+			fmt.Println("Executing analysis command...")
 
 			if cliCtx.Verbose {
 				fmt.Println("Verbose enabled")
@@ -118,10 +117,11 @@ func NewAnalyzeCommand(cliCtx *CliContext) *cobra.Command {
 				},
 			)
 
-			return uc.ExecuteSonarRequest(
+			err := uc.ExecuteSonarRequest(
 				payload,
 				cliCtx.serverSharedKey,
 			)
+			return err
 		},
 	}
 
@@ -176,7 +176,7 @@ func NewAnalyzeCommand(cliCtx *CliContext) *cobra.Command {
 
 	_ = analyzeCommand.MarkFlagRequired("sonar-project-key")
 	_ = analyzeCommand.MarkFlagRequired("sonar-task-id")
-	_ = analyzeCommand.MarkFlagRequired("sever-shared-key")
+	_ = analyzeCommand.MarkFlagRequired("server-shared-key")
 
 	return analyzeCommand
 }

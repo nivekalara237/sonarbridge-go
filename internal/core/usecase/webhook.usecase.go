@@ -41,7 +41,8 @@ func (svc *Service) Execute(ctx context.Context, webhookData domain.SonarQubeWeb
 		taskStatus,
 	)
 	if err != nil {
-		logging.Error("échec récupération analysisId", "taskId", webhookData.TaskID, err)
+		logging.Error("échec récupération analysisId", "taskId", webhookData.TaskID, "error", err)
+		return nil, err
 	}
 
 	commitSha, _ := svc.getCommitSha(ctx, webhookData.GitLab.ProjectID, strconv.Itoa(webhookData.MergeRequest.IID), webhookData.Branch.Commit.SHA, webhookData.GitLab.CIToken)
@@ -73,7 +74,7 @@ func (svc *Service) Execute(ctx context.Context, webhookData domain.SonarQubeWeb
 			CommitSHA: webhookData.Branch.Commit.SHA,
 		},
 		QualityGate: aggregateQualityGateStatus(analysis.QualityGate.Status),
-		Measures:    sonar.Measures{},
+		Measures:    analysis.Metrics,
 		Issues:      aggregateIssues(analysis.Issues),
 		ReportURL:   analysis.DashboardUrl,
 	}

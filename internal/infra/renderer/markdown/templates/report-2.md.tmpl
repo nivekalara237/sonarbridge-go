@@ -4,7 +4,7 @@
 Task Status {{ repeat 5 "&nbsp;" }} {{ analysisStatus .Status }}\
 Quality Gate {{ repeat 4 "&nbsp;" }} {{ qualityGateStatus .QualityGate }}
 
-#### Issues
+#### Overall Code
 
 🔴 *Blocker* {{ repeat 12 "&nbsp;" }} {{ .Issues.Blocker }}\
 🔴 *Critical* {{ repeat 13 "&nbsp;" }} {{ .Issues.Critical }}\
@@ -12,13 +12,20 @@ Quality Gate {{ repeat 4 "&nbsp;" }} {{ qualityGateStatus .QualityGate }}
 🟡 *Minor* {{ repeat 15 "&nbsp;" }} {{ .Issues.Minor }}
 
 
-#### New about downstream of branch
+Coverages {{ repeat 15 "&nbsp;" }} {{ .Measures.coverage }}%\
+Duplications {{ repeat 13 "&nbsp;" }} {{ .Measures.duplicated_lines_density }}%
+
+#### Issues on New Code(The last Commit)
 
 *Total New Issue* {{ repeat 5 "&nbsp;" }} {{ .Issues.NewIssues }}
 
 Code Smells {{ repeat 14 "&nbsp;" }} {{ .Issues.NewCodeSmells }}\
 New Bugs {{ repeat 18 "&nbsp;" }}  {{ .Issues.NewBugs }}\
 New Vulnerabilities {{ repeat 3 "&nbsp;" }} {{ .Issues.NewVulnerabilities }}
+
+
+New Coverages {{ repeat 5 "&nbsp;" }} {{ .Measures.new_coverage }}%\
+Dew Duplications {{ repeat 5 "&nbsp;" }} {{ .Measures.duplicated_lines_density }}%
 
 ---
 

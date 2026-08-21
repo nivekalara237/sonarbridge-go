@@ -76,8 +76,7 @@ func (useCase *WebhookHandler) Handler(writer http.ResponseWriter, request *http
 	})
 	if err != nil {
 		logging.Error("erreur inattendue", err)
-		// http.Error(writer, err.Error(), http.StatusInternalServerError)
-		return httpx.ErrInternal
+		return httpx.New(http.StatusInternalServerError, "Internal_error", err.Error())
 	}
 	code := http.StatusOK
 	if !response.Mergeable {

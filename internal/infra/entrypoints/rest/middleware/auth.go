@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"slices"
 	"sonarbridge-go/internal/infra/entrypoints/rest/httpx"
 	"sonarbridge-go/internal/logging"
@@ -53,7 +54,7 @@ func verifySignature(secret string, r *http.Request) bool {
 		return false
 	}
 
-	if time.Now().UTC().Sub(time.Unix(timestamp, 0)) > 5*time.Minute {
+	if time.Now().UTC().Sub(time.Unix(timestamp, 0)) > 15*time.Second {
 		return false
 	}
 
@@ -71,7 +72,7 @@ func verifySignature(secret string, r *http.Request) bool {
 func AuthHmacSignature(sharedSecret string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
-		if !unAuthenticableRoute(r) && !verifySignature(sharedSecret, r) {
+		if !unsecuredRoutes(r) && !verifySignature(sharedSecret, r) {
 			httpx.WriteError(w, r, httpx.ErrForbidden)
 			logging.Error("Forbidden: invalid signature")
 			return
@@ -81,8 +82,25 @@ func AuthHmacSignature(sharedSecret string, next http.Handler) http.Handler {
 	})
 }
 
-func unAuthenticableRoute(r *http.Request) bool {
+func unsecuredRoutes(r *http.Request) bool {
 	path := r.URL.Path
-	insecuredRoutes := []string{"/", "/healthz", "/docs/(.*)"}
-	return slices.Contains(insecuredRoutes, path)
+
+	var (
+		exactRoutes = []string{"/", "/healthz", "/livez", "/docs"}
+		regexRoutes = []*regexp.Regexp{
+			regexp.MustCompile(`^/docs/.*`),
+		}
+	)
+
+	if slices.Contains(exactRoutes, path) {
+		return true
+	}
+
+	for _, regx := range regexRoutes {
+		if regx.MatchString(path) {
+			return true
+		}
+	}
+
+	return false
 }

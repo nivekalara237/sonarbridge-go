@@ -10,6 +10,8 @@ type Measures struct {
 	NewIssues          int
 	NewBugs            int
 	NewVulnerabilities int
+	NewCoverage        int
+	NewDuplications    int
 }
 
 type MeasureItem struct {
