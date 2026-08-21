@@ -4,7 +4,7 @@ services:
       context: ../..
       dockerfile: DockerfileServer
     ports:
-      - "9000:9045"
+      - "9000:9405"
     env_file:
       - ../../.env
     healthcheck:

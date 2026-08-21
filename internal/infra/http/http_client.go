@@ -11,7 +11,9 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"sonarbridge-go/internal/infra/entrypoints/rest/httpx"
 	"sonarbridge-go/internal/logging"
+	"sonarbridge-go/pkg/httpclient"
 	"strings"
 	"time"
 )
@@ -77,7 +79,7 @@ func NewClientHttp(baseUrl, token string, cType ClientType, caCertPath string) *
 	}
 }
 
-func (c *Client) Get(ctx context.Context, path string, params url.Values, out any) error {
+func (c *Client) Get(ctx context.Context, path string, params url.Values, out any) *httpclient.ClientError {
 	u := c.baseUrl + path
 	if len(params) > 0 {
 		u += "?" + params.Encode()
@@ -85,7 +87,7 @@ func (c *Client) Get(ctx context.Context, path string, params url.Values, out an
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
-		return fmt.Errorf("création de la requête %s, %w", path, err)
+		panic(fmt.Errorf("création de la requête %s, %w", path, err))
 	}
 	if c.clientFor == gitlab {
 		req.Header.Set("Content-Type", "application/json")
@@ -103,24 +105,30 @@ func (c *Client) Get(ctx context.Context, path string, params url.Values, out an
 
 	response, err := c.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("appel API %s, %s: %w", c.clientFor, path, err)
+		panic(fmt.Errorf("appel API %s, %s: %w", c.clientFor, path, err))
 	}
 	defer response.Body.Close()
 
-	if response.StatusCode != http.StatusOK {
+	if !isSuccess(response.StatusCode) {
 		Body, _ := io.ReadAll(response.Body)
-		return fmt.Errorf("%s a repondu %d: %s", path, response.StatusCode, string(Body))
+
+		// return fmt.Errorf("%s a repondu %d: %s", path, response.StatusCode, string(Body))
+		return &httpclient.ClientError{
+			StatusCode: response.StatusCode,
+			Status:     response.Status,
+			Body:       Body,
+		}
 	}
 
 	decoder := json.NewDecoder(response.Body)
 	// decoder.DisallowUnknownFields()
 	if err5 := decoder.Decode(&out); err5 != nil {
-		return err5
+		panic(httpx.ErrInternal)
 	}
 	return nil
 }
 
-func (c *Client) Post(ctx context.Context, path string, params url.Values, payload string, response any) error {
+func (c *Client) Post(ctx context.Context, path string, params url.Values, payload string, response any) *httpclient.ClientError {
 	u := c.baseUrl + path
 	if len(params) > 0 {
 		u += "?" + params.Encode()
@@ -128,7 +136,7 @@ func (c *Client) Post(ctx context.Context, path string, params url.Values, paylo
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader([]byte(payload)))
 	if err != nil {
-		return fmt.Errorf("création de la requête %s: %w", path, err)
+		panic(fmt.Errorf("création de la requête %s: %w", path, err))
 	}
 	if c.clientFor == gitlab {
 		req.Header.Set("Content-Type", "application/json")
@@ -150,25 +158,30 @@ func (c *Client) Post(ctx context.Context, path string, params url.Values, paylo
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("appel API %s, %s : %w", c.clientFor, path, err)
+		panic(fmt.Errorf("appel API %s, %s : %w", c.clientFor, path, err))
 	}
 	defer resp.Body.Close()
 
 	if !isSuccess(resp.StatusCode) {
 		Body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("%s a repondu %d : %s", path, resp.StatusCode, string(Body))
+		// return fmt.Errorf("%s a repondu %d : %s", path, resp.StatusCode, string(Body))
+		return &httpclient.ClientError{
+			StatusCode: resp.StatusCode,
+			Status:     resp.Status,
+			Body:       Body,
+		}
 	}
 
 	decoder := json.NewDecoder(resp.Body)
 	// decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&response); err != nil {
-		return err
+		panic(httpx.ErrInternal)
 	}
 
 	return nil
 }
 
-func (c *Client) Delete(ctx context.Context, path string, params url.Values, payload string, out any) error {
+func (c *Client) Delete(ctx context.Context, path string, params url.Values, payload string, out any) *httpclient.ClientError {
 	u := c.baseUrl + path
 	if len(params) > 0 {
 		u += "?" + params.Encode()
@@ -176,7 +189,7 @@ func (c *Client) Delete(ctx context.Context, path string, params url.Values, pay
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, u, bytes.NewReader([]byte(payload)))
 	if err != nil {
-		return fmt.Errorf("création de la requête %s: %w", path, err)
+		panic(fmt.Errorf("création de la requête %s: %w", path, err))
 	}
 	if c.clientFor == gitlab {
 		req.Header.Set("Content-Type", "application/json")
@@ -194,13 +207,18 @@ func (c *Client) Delete(ctx context.Context, path string, params url.Values, pay
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("appel API %s, %s : %w", c.clientFor, path, err)
+		panic(fmt.Errorf("appel API %s, %s : %w", c.clientFor, path, err))
 	}
 	defer resp.Body.Close()
 
 	if !isSuccess(resp.StatusCode) {
 		Body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("%s a répondu %d : %s", path, resp.StatusCode, string(Body))
+		// return fmt.Errorf("%s a répondu %d : %s", path, resp.StatusCode, string(Body))
+		return &httpclient.ClientError{
+			StatusCode: resp.StatusCode,
+			Status:     resp.Status,
+			Body:       Body,
+		}
 	}
 
 	if out == nil {
@@ -208,7 +226,7 @@ func (c *Client) Delete(ctx context.Context, path string, params url.Values, pay
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
-		return err
+		panic(httpx.ErrInternal)
 	}
 
 	return nil

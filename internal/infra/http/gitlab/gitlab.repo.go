@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/url"
 	"sonarbridge-go/configs"
 	"sonarbridge-go/internal/core/domain"
@@ -56,7 +57,7 @@ func (inter *Interactor) CreateCommitStatus(ctx context.Context, projectId, sha,
 		PipelineId:  &statusData.PipelineId,
 	})
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
 
 	payload := string(data)
@@ -65,8 +66,8 @@ func (inter *Interactor) CreateCommitStatus(ctx context.Context, projectId, sha,
 
 	err0 := httpClient.Post(ctx, "/projects/"+(utils.EncodeURIComponent(projectId))+"/statuses/"+sha, url.Values{}, payload, &response)
 	if err0 != nil {
-		logging.Error("error creating commit status", err0.Error())
-		return nil, err0
+		logging.Error("error creating commit status", "error", err0.Error())
+		return nil, fmt.Errorf("error creating commit status: [%d]", err0.StatusCode)
 	}
 
 	logging.Info("created commit status for", "sha", sha)
@@ -81,7 +82,7 @@ func (inter *Interactor) CreateOrUpdateMergeRequestComment(ctx context.Context, 
 	httpClient, err := inter.createHttpClient(ciToken)
 
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
 
 	var notesResponse []NoteResponse
@@ -93,7 +94,7 @@ func (inter *Interactor) CreateOrUpdateMergeRequestComment(ctx context.Context, 
 		&notesResponse,
 	); err0 != nil {
 		logging.Error("échec de récupération des notes de la MR/PR", "mrIID", mergeRequestId)
-		return nil, err0
+		return nil, fmt.Errorf("échec de récupération des notes de la MR/PR: [%d]", err0.StatusCode)
 	}
 	var existingComment *NoteResponse
 	if notesResponse != nil {
@@ -115,11 +116,11 @@ func (inter *Interactor) CreateOrUpdateMergeRequestComment(ctx context.Context, 
 			"",
 			nil,
 		)
-		logging.Info("Deleted existing sticky comment")
 		if errdel != nil {
 			logging.Warn("échec de suppression du dernier commentaire type Analyse Sonar (commit note)", "commentId", existingComment.ID)
-			return nil, errdel
+			return nil, fmt.Errorf("échec de suppression du dernier commentaire: [%d]", errdel.StatusCode)
 		}
+		logging.Info("Deleted existing sticky comment")
 
 		response, errc := createNewComment(ctx, httpClient, projectId, mergeRequestId, comment)
 
@@ -139,7 +140,7 @@ func (inter *Interactor) GetMergeRequest(ctx context.Context, projectId, mergeRe
 	httpClient, err := inter.createHttpClient(ciToken)
 	if err != nil {
 		logging.Error("Error creating httpclient")
-		return nil, err
+		panic(err)
 	}
 
 	var response MergeRequestResponse
@@ -150,8 +151,8 @@ func (inter *Interactor) GetMergeRequest(ctx context.Context, projectId, mergeRe
 		nil,
 		&response,
 	); err0 != nil {
-		logging.Error("Error getting MR", "mrIID", mergeRequestId, err0)
-		return nil, err0
+		logging.Error("Error getting MR", "mrIID", mergeRequestId, "error", err0)
+		return nil, fmt.Errorf("unable to get MR[%s]: [%d]", mergeRequestId, err0.StatusCode)
 	}
 
 	return &domain.GitLabMergeRequest{
@@ -188,8 +189,8 @@ func createNewComment(ctx context.Context, httpClient *http.Client, projectId, m
 		&response,
 	)
 	if err != nil {
-		logging.Warn("échec création du commentaire (commit note)", "mrIId", mergeRequestId, err)
-		return nil, err
+		logging.Warn("échec création du commentaire (commit note)", "mrIID", mergeRequestId, "error", err)
+		return nil, fmt.Errorf("échec création du commentaire: [%d]", err.StatusCode)
 	}
 	logging.Info("created new comment on MR !", "mrIID", mergeRequestId)
 	return &response, nil

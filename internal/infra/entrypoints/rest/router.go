@@ -40,6 +40,5 @@ func NewRouter(
 		Add(func(handler http.Handler) http.Handler {
 			return mdlw.AuthHmacSignature(config.WebhookSecret, handler)
 		}).
-		// Add().
 		Build()
 }

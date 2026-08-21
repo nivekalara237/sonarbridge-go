@@ -2,6 +2,7 @@ package sonar
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -9,6 +10,7 @@ import (
 	"sonarbridge-go/internal/core/domain"
 	"sonarbridge-go/internal/core/domain/sonar"
 	"sonarbridge-go/internal/core/interactor"
+	"sonarbridge-go/internal/infra/entrypoints/rest/httpx"
 	"sonarbridge-go/internal/infra/http"
 	"sonarbridge-go/internal/infra/utils"
 	"sonarbridge-go/internal/logging"
@@ -54,7 +56,7 @@ func (inter *Interactor) GetTaskDetails(ctx context.Context, taskId string) (*do
 
 	if err0 := sonarClient.Get(ctx, "/ce/task", url.Values{"id": {taskId}}, &response); err0 != nil {
 		logging.Error("échec de récupération de la dernière analyse sonar", "taskId", taskId, "error", err0)
-		return nil, err0
+		return nil, fmt.Errorf("échec de récupération de la dernière analyse sonar [ID=%s], [Status=%d]", taskId, err0.StatusCode)
 	}
 
 	return &domain.SonarTaskDetails{
@@ -72,7 +74,6 @@ func (inter *Interactor) GetAnalysisDetails(ctx context.Context, projectKey, bra
 	if len(actualTaskId) == 0 {
 		latestAnalysis, err := inter.GetLatestAnalysis(ctx, projectKey, branch)
 		if err != nil {
-			logging.Error("échec de récupération de la dernière analyse sonar", "taskId", taskId, "error", err)
 			return nil, err
 		}
 		analysisId = latestAnalysis.AnalysisId
@@ -81,7 +82,6 @@ func (inter *Interactor) GetAnalysisDetails(ctx context.Context, projectKey, bra
 	} else {
 		task, err := inter.GetTaskDetails(ctx, actualTaskId)
 		if err != nil {
-			logging.Error("échec récupération analysisId", "taskId", actualTaskId, "erreur", err)
 			return nil, err
 		}
 		analysisId = task.AnalysisId
@@ -90,7 +90,7 @@ func (inter *Interactor) GetAnalysisDetails(ctx context.Context, projectKey, bra
 
 	sonarClient, err := inter.createHttpClient()
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
 
 	// Get Quality gate status
@@ -100,7 +100,7 @@ func (inter *Interactor) GetAnalysisDetails(ctx context.Context, projectKey, bra
 		"/qualitygates/project_status",
 		url.Values{"analysisId": {analysisId}}, &qgResponse); err0 != nil {
 		logging.Error("échec récupération project_status", "analysisId", analysisId, "erreur", err0)
-		return nil, err0
+		return nil, fmt.Errorf("impossible de récupérer l'analyse [ID=%s], le server sonarqube a répondu %d", analysisId, err0.StatusCode)
 	}
 
 	if qgResponse.ProjectStatus.Status == QG_NONE {
@@ -140,7 +140,7 @@ func (inter *Interactor) GetAnalysisDetails(ctx context.Context, projectKey, bra
 	if err1 := sonarClient.Get(ctx, "/measures/component",
 		url.Values{"component": {projectKey}, "metricKeys": {metricKeys}}, &metricResponse); err1 != nil {
 		logging.Error("échec de récupération des mesures (métriques)", "taskId", taskId, "error", err1)
-		return nil, err1
+		return nil, fmt.Errorf("échec de récupération des mesures (métriques)")
 	}
 
 	issuesResponse, err := inter.getAllBranchIssues(ctx, projectKey, branch)
@@ -227,7 +227,7 @@ func (inter *Interactor) GetLatestAnalysis(ctx context.Context, projectKey, bran
 
 	sonarClient, e := inter.createHttpClient()
 	if e != nil {
-		return nil, e
+		panic(httpx.ErrInternal)
 	}
 
 	var response TasksResponse
@@ -237,7 +237,7 @@ func (inter *Interactor) GetLatestAnalysis(ctx context.Context, projectKey, bran
 		"ps":        {"1"},
 	}, &response); er != nil {
 		logging.Error("échec de récupération de la dernière activité Sonar", "branch", branch, "error", er)
-		return nil, er
+		return nil, fmt.Errorf("impossible de récupérer la dernière activité Sonar: [%d]", er.StatusCode)
 	}
 
 	lastTask := response.Tasks[0]
@@ -268,7 +268,7 @@ func (inter *Interactor) GetLastTask(ctx context.Context, projectKey, branch str
 		"ps":        {"1"},
 	}, &response); er != nil {
 		logging.Error("échec de récupération de la dernière activité Sonar", "branch", branch, "error", er)
-		return nil, er
+		return nil, fmt.Errorf("échec de récupération de la dernière activité Sonar: [%d]", er.StatusCode)
 	}
 
 	return nil, nil
@@ -304,7 +304,7 @@ func (inter *Interactor) getIssuesIteration(client *http.Client, ctx context.Con
 	}
 
 	if err2 := client.Get(ctx, "/issues/search", issueParams, &issuesResponse); err2 != nil {
-		return nil, err2
+		return nil, fmt.Errorf("impossible de récupérer les issues sonar: [%d]", err2.StatusCode)
 	}
 	return &issuesResponse, nil
 }
@@ -312,7 +312,7 @@ func (inter *Interactor) getIssuesIteration(client *http.Client, ctx context.Con
 func (inter *Interactor) getAllBranchIssues(ctx context.Context, projectKey, branch string) (*IssuesResponse, error) {
 	sonarClient, e := inter.createHttpClient()
 	if e != nil {
-		return nil, e
+		panic(e)
 	}
 	const pageSize = 50
 	var mergeComponents = func(existingComponents, incomingComponents []IssueSearchComponent) []IssueSearchComponent {
@@ -365,4 +365,40 @@ func (inter *Interactor) getAllBranchIssues(ctx context.Context, projectKey, bra
 	}
 
 	return result, nil
+}
+
+type sonarErrorResponse struct {
+	Errors []struct {
+		Msg string `json:"msg"`
+	} `json:"errors"`
+}
+
+func extractSonarError(body []byte) string {
+	body = []byte(strings.TrimSpace(string(body)))
+
+	if len(body) == 0 {
+		return ""
+	}
+
+	// SonarQube error response
+	var response sonarErrorResponse
+
+	if err := json.Unmarshal(body, &response); err == nil {
+		if len(response.Errors) > 0 {
+			messages := make([]string, 0, len(response.Errors))
+
+			for _, err := range response.Errors {
+				if msg := strings.TrimSpace(err.Msg); msg != "" {
+					messages = append(messages, msg)
+				}
+			}
+
+			if len(messages) > 0 {
+				return strings.Join(messages, "; ")
+			}
+		}
+	}
+
+	// Fallback : réponse texte / HTML / proxy / gateway
+	return string(body)
 }

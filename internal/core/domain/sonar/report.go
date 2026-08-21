@@ -20,7 +20,7 @@ type Report struct {
 	Status      AnalysisStatus
 	QualityGate QualityGateStatus
 	Issues      IssueSummary
-	Measures    Measures
+	Measures    map[string]any
 	// Measures  []MeasureItem
 	Analysis  Analysis
 	ReportURL string

@@ -70,6 +70,10 @@ func (g *GenerateSonarReportUseCase) ExecuteSonarRequest(
 		return err
 	}
 
+	fmt.Println("0000000000000000000000000000000")
+	fmt.Println(string2.ToString(o))
+	fmt.Println("0000000000000000000000000000000")
+
 	if !o["Mergeable"].(bool) {
 		return fmt.Errorf("the project is not mergeable, because the sonar analysis failed. QG STATUS=%s", o["QualityGateStatus"])
 	}
