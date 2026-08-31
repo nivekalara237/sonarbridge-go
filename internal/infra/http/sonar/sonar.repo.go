@@ -165,7 +165,14 @@ func (inter *Interactor) GetAnalysisDetails(ctx context.Context, projectKey, bra
 		}
 	}
 
-	dashboardUrl := strings.TrimRight(inter.config.SonarBaseUrl, "/api") + "/dashboard?codeScope=overall&id=" + projectKey + "&branch=" + branch
+	urlb := strings.Builder{}
+	urlb.WriteString(strings.TrimRight(inter.config.SonarBaseUrl, "/api"))
+	urlb.WriteString("/dashboard?codeScope=overall&id=" + projectKey)
+	if inter.config.SonarEdition != configs.SONARQUBE_CE {
+		urlb.WriteString("&branch=" + branch)
+	}
+
+	dashboardUrl := urlb.String()
 
 	var newIssues []any
 

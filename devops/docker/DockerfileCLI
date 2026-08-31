@@ -16,7 +16,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
 
 FROM alpine:3.22
 
-RUN apk add --no-cache ca-certificates jq \
+RUN apk add --no-cache ca-certificates jq git curl \
     && addgroup -S sbridge \
     && adduser -S -G sbridge sbridge
 
