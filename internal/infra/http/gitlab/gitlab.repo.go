@@ -64,6 +64,7 @@ func (inter *Interactor) CreateCommitStatus(ctx context.Context, projectId, sha,
 
 	var response any
 
+	// Create d'un status = Pipeline:stage de type external
 	err0 := httpClient.Post(ctx, "/projects/"+(utils.EncodeURIComponent(projectId))+"/statuses/"+sha, url.Values{}, payload, &response)
 	if err0 != nil {
 		logging.Error("error creating commit status", "error", err0.Error())
