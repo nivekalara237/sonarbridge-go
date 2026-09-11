@@ -16,7 +16,13 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
 
 FROM alpine:3.22
 
-RUN apk add --no-cache ca-certificates jq \
+ARG YQ_VERSION=4.53.3
+ARG TARGETOS=
+ARG TARGETARCH=
+
+RUN apk -U upgrade \
+    && apk add --no-cache ca-certificates bash openssh jq git curl \
+    && wget -q https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_${TARGETOS}_${TARGETARCH} -O /usr/local/bin/yq \
     && addgroup -S sbridge \
     && adduser -S -G sbridge sbridge
 

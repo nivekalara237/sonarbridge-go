@@ -70,9 +70,9 @@ func (g *GenerateSonarReportUseCase) ExecuteSonarRequest(
 		return err
 	}
 
-	fmt.Println("0000000000000000000000000000000")
+	fmt.Println("********************************")
 	fmt.Println(string2.ToString(o))
-	fmt.Println("0000000000000000000000000000000")
+	fmt.Println("********************************")
 
 	if !o["Mergeable"].(bool) {
 		return fmt.Errorf("the project is not mergeable, because the sonar analysis failed. QG STATUS=%s", o["QualityGateStatus"])
@@ -88,7 +88,7 @@ type GenerateSonarReportUseCase struct {
 
 func NewGenerateSonarReport(baseUrl string, opts map[string]any) *GenerateSonarReportUseCase {
 	var tlsOpt httpclient.Option
-	if certFile, ok := opts["server-cert-file"]; ok {
+	if certFile, ok := opts["server-cert-file"]; ok && certFile != "" {
 		tlsOpt = httpclient.WithTLSCACertFile(certFile.(string))
 	}
 	client := httpclient.NewClientHttp(
