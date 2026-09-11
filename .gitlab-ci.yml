@@ -6,7 +6,7 @@ stages:
   - deploy
 
 variables:
-  GO_VERSION: "1.26"
+  GO_VERSION: "1.27"
   DOCKER_DRIVER: overlay2
   DOCKER_TLS_CERTDIR: "/certs"
   CONTAINER_IMAGE: ${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA}

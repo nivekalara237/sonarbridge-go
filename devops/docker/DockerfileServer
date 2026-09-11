@@ -1,4 +1,4 @@
-FROM golang:1.26-alpine AS builder
+FROM golang:1.27-alpine AS builder
 LABEL author="Kevin Lactio Kemta<kevin.lactio-kemta-ext@cavom.fr>"
 
 RUN apk add --no-cache make
