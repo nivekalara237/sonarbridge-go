@@ -107,7 +107,7 @@ type MeasureMetricItemResponse struct {
 	Hidden                bool   `json:"hidden,omitempty"`
 }
 
-//go:generate stringer -type=MeasuresResponse
+// /go:generate stringer -type=MeasuresResponse
 type MeasuresResponse struct {
 	Component MeasureComponentResponse    `json:"component"`
 	Metrics   []MeasureMetricItemResponse `json:"metrics"`

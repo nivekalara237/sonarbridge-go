@@ -22,3 +22,11 @@ frontend/
 *.key
 
 !devops/k8s/**/*.env
+
+devops/
+
+/local-registry/assets/
+/assets/
+# Added by goreleaser init:
+dist/
+bin.local/

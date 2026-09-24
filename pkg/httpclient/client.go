@@ -296,6 +296,7 @@ func (c *Client) buildURL(path string, opts *RequestOptions) (*url.URL, error) {
 
 func (c *Client) doWithRetry(req *http.Request) (*http.Response, error) {
 	var lastErr error
+	var lastResponse *http.Response
 	for attempt := 0; attempt <= c.retry.MaxRetries; attempt++ {
 		// Cloner la requête pour réutiliser le corps (important si body non rejouable)
 		reqClone := req.Clone(req.Context())
@@ -306,6 +307,7 @@ func (c *Client) doWithRetry(req *http.Request) (*http.Response, error) {
 		}
 
 		resp, err := c.httpClient.Do(reqClone)
+		lastResponse = resp
 		if err == nil && !c.shouldRetry(resp) {
 			return resp, nil
 		}
@@ -328,7 +330,13 @@ func (c *Client) doWithRetry(req *http.Request) (*http.Response, error) {
 			}
 		}
 	}
-	return nil, fmt.Errorf("request failed after %d retries: %w", c.retry.MaxRetries, lastErr)
+	return nil, &ClientError{
+		StatusCode: lastResponse.StatusCode,
+		Status:     lastResponse.Status,
+		Message:    lastErr.Error(),
+		Body:       nil,
+	}
+	// return nil, fmt.Errorf("request failed after %d retries: %w", c.retry.MaxRetries, lastErr)
 }
 
 func (c *Client) shouldRetry(resp *http.Response) bool {

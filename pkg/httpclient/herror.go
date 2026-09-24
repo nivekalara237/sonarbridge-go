@@ -30,3 +30,14 @@ func checkResponse(resp *http.Response) error {
 	}
 	return nil
 }
+
+func (e *ClientError) is5xx() bool {
+	return e.StatusCode <= 500 && e.StatusCode >= 599
+}
+
+func (e *ClientError) isBadRequest() bool {
+	return e.StatusCode == 400
+}
+func (e *ClientError) isNotfound() bool {
+	return e.StatusCode == 404
+}

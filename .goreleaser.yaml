@@ -1,0 +1,143 @@
+# This is an example .goreleaser.yml file with some sensible defaults.
+# Make sure to check the documentation at https://goreleaser.com
+
+# The lines below are called `modelines`. See `:help modeline`
+# Feel free to remove those if you don't want/need to use them.
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+# vim: set ts=2 sw=2 tw=0 fo=cnqoj
+version: 2
+
+project_name: sonarbridge-go
+metadata:
+  mod_timestamp: "{{ .CommitTimestamp }}"
+# If you change (initially ./dist) this value and use goreleaser continue, you’ll need to specify --dist when running it.
+dist: ./bin.local/assets/binaries
+
+env:
+  - VERSION="{{ .Version }}"
+  - IGNORE_TAG=latest
+  - APP_PACKAGE_NAME=sonarbridge-go
+  - VCS_PATH=./plugins/vcs
+  - VCS_PKG=sonarbridge-go/plugins/vcs
+  - PKG_VERSION=sonarbridge-go/internal/build
+  - GITLAB_PROTOCOL_VERSION="1"
+  - GITHUB_PROTOCOL_VERSION="1"
+  - BB_PROTOCOL_VERSION="1"
+  - GITEA_PROTOCOL_VERSION="1"
+retry:
+  attempts: 2
+  delay: 5s
+  max_delay: 3m
+git:
+  ignore_tags:
+    - nightly
+    - "*-snapshot"
+    - "*-local"
+    - "*-dev"
+    - "{{ .Env.IGNORE_TAG }}"
+artifactories:
+  - signature: true
+checksum:
+  name_template: "{{ .ProjectName }}-{{ .ArtifactName }}.{{ .Algorithm }}_checksums.txt"
+  split: true
+  algorithm: sha256
+
+before:
+  hooks:
+    # - make clean
+    # - go mod tidy
+    - make tidy
+    # you may remove this if you don't need "go generate"
+    - go generate ./...
+
+builds:
+  - id: vcs-gitlab-plugin
+    main: ./plugins/vcs/gitlab/cmd
+    binary: vcs-gitlab-plugin
+    command: build
+    builder: go
+    ldflags:
+      - -s -w -X {{ .Env.VCS_PKG }}/gitlab/build.Version={{ .Version }} -X {{ .Env.VCS_PKG }}/gitlab/build.ProtocolVersion={{ .Env.GITLAB_PROTOCOL_VERSION }} -X {{ .Env.VCS_PKG }}/gitlab/build.Date={{ .Now.Format "2006-01-02T15:04:05.12340" }}
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - windows
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm
+      - arm64
+      - "386"
+    tool: "go1.27.1"
+    no_unique_dist_dir: true
+
+  - main: ./cmd/cli
+    binary: bridge-ctl
+    id: cli-bridge-pipeline-ctl
+    command: build
+    builder: go
+    # buildmode: c-shared
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - windows
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm
+      - arm64
+      - "386"
+    tool: "go1.27.1"
+    no_unique_dist_dir: true
+
+  - main: ./cmd/server
+    binary: bridge-server
+    id: ci-bridge-server
+    command: build
+    builder: go
+    # buildmode: c-shared
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - windows
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm
+      - arm64
+      - "386"
+    tool: "go1.27.1"
+    no_unique_dist_dir: true
+
+archives:
+  - formats: [tar.gz]
+    id: ci-bridge-archive
+    # this name template makes the OS and Arch compatible with the results of `uname`.
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    # use zip for windows archives
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+
+release:
+  footer: >-
+
+    ---
+
+    Released by [GoReleaser](https://github.com/goreleaser/goreleaser).

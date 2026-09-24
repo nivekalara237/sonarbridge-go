@@ -23,8 +23,7 @@ func main() {
 		return
 	}
 
-	var cliErr *cli.CLIError
-	if errors.As(err, &cliErr) {
+	if cliErr, ok := errors.AsType[*cli.CLIError](err); ok {
 		_, _ = fmt.Fprintln(os.Stderr, "Error:", cliErr)
 		if cliErr.ShowUsage {
 			_, _ = fmt.Fprintln(os.Stderr)
