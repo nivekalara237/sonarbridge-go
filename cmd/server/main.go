@@ -12,16 +12,14 @@ import (
 	"sonarbridge-go/configs"
 	"sonarbridge-go/internal/bootstrap"
 	"sonarbridge-go/internal/build"
-	"sonarbridge-go/internal/cli/serve"
+	"sonarbridge-go/internal/cli/server"
 	"sonarbridge-go/internal/core/usecase"
 	"sonarbridge-go/internal/infra/entrypoints/rest"
 	"sonarbridge-go/internal/infra/repository/report"
-	"sonarbridge-go/internal/infra/utils"
 	"sonarbridge-go/internal/logging"
+	stringify "sonarbridge-go/pkg/string"
 	"strconv"
 	"time"
-
-	"github.com/spf13/cobra"
 )
 
 const banner = `
@@ -35,11 +33,7 @@ SONARBRIDE-GO :: Application Started :: Go`
 
 const KeyServerAddr = "KeyAddr"
 
-var AppServerCommandUseName = "sonarbridge"
-
-var rootCmd = &cobra.Command{
-	Use: AppServerCommandUseName,
-}
+var rootCmd = server.New()
 
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
@@ -49,27 +43,34 @@ func Execute() {
 
 func init() {
 
-	cfg := configs.Load()
+	rootCmd.AddFunctionalCommand(func(callableArgs ...any) {
+		printBanner()
 
-	rootCmd.AddCommand(serve.NewServeCommand(cfg, func(port int, host string) {
+		// var c = configs.AppConfig
+		var c = callableArgs[0].(configs.AppUntypedConfig)
 
-		fmt.Println(banner)
-		fmt.Println()
-		fmt.Println(build.GetBuildInfo().ToServerString())
-		fmt.Println()
+		fmt.Println("++++++++++++++++++")
+		fmt.Println(stringify.ToJSON(c))
+		// fmt.Println(stringify.ToJSON(callableArgs))
+		fmt.Println("++++++++++++++++++")
 
-		if err := logging.InitServer(*cfg); err != nil {
+		if err := logging.InitServer(c.Logging.Level); err != nil {
 			log.Fatal(err)
 		}
 
-		svc := bootstrap.NewApp(*cfg)
+		app := bootstrap.NewApp()
 
+		/*er := app.InitPlugins()
+		if er != nil {
+			fmt.Println("///////  Error Plugin ////////")
+			fmt.Println(er)
+			fmt.Println("/////// ////////////// ////////")
+		}*/
 		healthHandler := rest.NewHealthHandler()
-		webhookHandler := rest.NewWebhookHandler(svc.Service)
+		webhookHandler := rest.NewWebhookHandler(app.Service)
 		reportHandler := rest.NewReportHandler(usecase.NewReportService(report.NewRepository()))
 
 		router := rest.NewRouter(
-			*cfg,
 			healthHandler,
 			webhookHandler,
 			reportHandler,
@@ -86,14 +87,13 @@ func init() {
 		ctx, cancelCtx := context.WithCancel(context.Background())
 
 		// defer cancelCtx()
-
-		fport := utils.Ternary[string](port == 0, cfg.Port, strconv.Itoa(port))
 		serverOne := &http.Server{
-			Addr:              net.JoinHostPort(host, fport),
+			Addr:              net.JoinHostPort(c.Server.Host, strconv.Itoa(c.Server.Port)),
 			Handler:           *router,
 			ReadHeaderTimeout: 5 * time.Second,
 			WriteTimeout:      20 * time.Second,
 			IdleTimeout:       60 * time.Second,
+			TLSConfig:         nil,
 			BaseContext: func(listener net.Listener) context.Context {
 				ctx = context.WithValue(ctx, KeyServerAddr, listener.Addr().String())
 				return ctx
@@ -103,10 +103,18 @@ func init() {
 		log.Printf("listening on %s", serverOne.Addr)
 
 		go func() {
-			err := serverOne.ListenAndServe()
+			var err error
+			if configs.AppConfig.Server.Tls.Enabled {
+				err = serverOne.ListenAndServeTLS(
+					configs.AppConfig.Server.Tls.CertFile,
+					configs.AppConfig.Server.Tls.KeyFile,
+				)
+			} else {
+				err = serverOne.ListenAndServe()
+			}
 
 			if errors.Is(err, http.ErrServerClosed) {
-				fmt.Printf("Server One closed\n")
+				fmt.Printf("Server one closed\n")
 			} else if err != nil {
 				fmt.Printf("Error listening for server one: %s\n", err)
 				os.Exit(1)
@@ -116,10 +124,16 @@ func init() {
 		}()
 
 		<-ctx.Done()
-	}))
-	// rootCmd.AddCommand(build.Context)
+	})
 }
 
 func main() {
 	Execute()
+}
+
+func printBanner() {
+	fmt.Println(banner)
+	fmt.Println()
+	fmt.Println(build.GetBuildInfo().ToServerString())
+	fmt.Println()
 }

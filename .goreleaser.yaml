@@ -52,7 +52,7 @@ before:
 
 builds:
   - id: vcs-gitlab-plugin
-    main: ./plugins/vcs/gitlab/cmd
+    main: ./cmd
     binary: vcs-gitlab-plugin
     command: build
     builder: go
@@ -70,7 +70,8 @@ builds:
       - arm64
       - "386"
     tool: "go1.27.1"
-    no_unique_dist_dir: true
+    no_unique_dist_dir: false
+    dir: "plugins/vcs/gitlab"
 
   - main: ./cmd/cli
     binary: bridge-ctl
@@ -90,7 +91,7 @@ builds:
       - arm64
       - "386"
     tool: "go1.27.1"
-    no_unique_dist_dir: true
+    no_unique_dist_dir: false
 
   - main: ./cmd/server
     binary: bridge-server
@@ -110,7 +111,7 @@ builds:
       - arm64
       - "386"
     tool: "go1.27.1"
-    no_unique_dist_dir: true
+    no_unique_dist_dir: false
 
 archives:
   - formats: [tar.gz]

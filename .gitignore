@@ -17,6 +17,7 @@ frontend/
 /internal/*.md
 /pkg/*.MD
 /pkg/*.md
+*.log
 
 *.crt
 *.key
@@ -30,3 +31,6 @@ devops/
 # Added by goreleaser init:
 dist/
 bin.local/
+
+./config.toml
+./config.yaml

@@ -1,0 +1,66 @@
+# home_dir: $HOME/.sbridge
+server:
+  host: 0.0.0.0
+  port: 8443
+  timezone: "Europe/Paris"
+  shared_secret_key_env_var: CI_BRIDGE_SHARED_SECRET
+  tls:
+    enabled: false
+    cert_file: /etc/bridge/tls/server.crt
+    key_file: /etx/bridge/tls/server.key
+    ca_file: ""
+  cors:
+    enabled: true
+    origins:
+      - "https://dashboard.ci-bridge.com"
+    allowed_methods: [GET, POST, PUT, DELETE]
+    allowed_headers:
+      - Content-Type
+      - Authorization
+    allow_credentials: false
+    max_age_seconds: 600
+
+sonar:
+  base_url: https://sonarqube.nivekaa.com
+  token_env_var: SONAR_TOKEN
+  cacert_path: ""
+  edition: community
+vcs_providers:
+  - name: gitlab
+    url: https://gitlab.nivekaa.com
+    token_env_var: GITLAB_TOKEN
+  - name: github
+    url: https://github.com
+    token_env_var: GITHUB_TOKEN
+    owner: nivekalara237
+    repo: "sonarbridge-binary"
+plugins:
+  dir: ${home_dir}/plugins
+  state_file: ${home_dir}/state.json
+  local_registry_file: ${home_dir}/registry.json
+  remote_registry:
+    enabled: true
+    type: github|http
+    repo_prefix: ci-bridge-vcs-
+    token_env_var: GITHUB_TOKEN
+    password: s3cr3t
+    username: kali
+    host: https://registry.nivekaa.com
+    tls:
+      cacert_file: ca.crt
+logging:
+  level: info
+  format: json
+telemetry:
+  metrics:
+    enabled: false
+    path: /metrics
+  tracing:
+    enabled: false
+    otlp_endpoint: localhost:4317
+    sample_ratio: 1.0
+    otlp_insecure: true
+    server_name: ci-bridge
+  health:
+    liveness_path: /healthz
+    readiness_path: /readyz

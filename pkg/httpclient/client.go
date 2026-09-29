@@ -302,7 +302,7 @@ func (c *Client) doWithRetry(req *http.Request) (*http.Response, error) {
 		reqClone := req.Clone(req.Context())
 		if req.Body != nil {
 			// Réinitialiser le corps en le relisant depuis le buffer d'origine
-			// Ici on suppose que le body est un *bytes.Reader ou *strings.Reader (réutilisable)
+			// Ici, on suppose que le body est un *bytes.Reader ou *strings.Reader (réutilisable)
 			// Pour plus de robustesse, vous pouvez stocker le corps original et le réassigner.
 		}
 
@@ -313,6 +313,7 @@ func (c *Client) doWithRetry(req *http.Request) (*http.Response, error) {
 		}
 		if err != nil {
 			lastErr = err
+			lastResponse = &http.Response{StatusCode: http.StatusInternalServerError, Status: "InternalServerError"}
 		} else {
 			// Lire et fermer le corps pour éviter les fuites
 			io.Copy(io.Discard, resp.Body)
@@ -344,12 +345,8 @@ func (c *Client) shouldRetry(resp *http.Response) bool {
 		return c.retry.RetryOn(resp, nil)
 	}
 	// By default, retry on 429, 500, 502, 503, 504
-	switch resp.StatusCode {
-	case http.StatusTooManyRequests, http.StatusInternalServerError,
-		http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
-		return true
-	}
-	return false
+	clientError := ClientError{StatusCode: resp.StatusCode}
+	return clientError.Retryable()
 }
 
 func loadCAPool(certPath string) (*x509.CertPool, error) {

@@ -17,6 +17,7 @@ type Manifest struct {
 	Capabilities    []string `json:"capabilities"`
 	Binary          string   `json:"binary"`
 	SHA256          string   `json:"sha256"`
+	Args            []string `json:"args,omitempty"`
 }
 
 // Discovered pairs the manifest with the resolved obsolete path to its

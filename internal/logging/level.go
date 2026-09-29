@@ -3,14 +3,13 @@ package logging
 import (
 	"fmt"
 	"log/slog"
-	"sonarbridge-go/configs"
 	"strings"
 )
 
-func GetLevel(cfg configs.Config) (slog.Level, error) {
+func GetLevel(cfgLevel string) (slog.Level, error) {
 	level := slog.LevelDebug
 
-	switch strings.ToLower(cfg.LogLevel) {
+	switch strings.ToLower(cfgLevel) {
 	case "debug":
 		level = slog.LevelDebug
 	case "info", "trace":

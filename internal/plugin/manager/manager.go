@@ -37,8 +37,10 @@ type instance struct {
 	adapter       runtime.Adapter
 	info          runtime.InstanceInfo // set after a successful handshake
 	binPath       string
-	stopRequested bool // set by stop/Disable/uninstall so a concurrent crash-watcher backs off
-	retries       int  // consecutive crash-restart attempts since the last deliberate Start
+	stopRequested bool              // set by stop/Disable/uninstall so a concurrent crash-watcher backs off
+	retries       int               // consecutive crash-restart attempts since the last deliberate Start
+	env           map[string]string // extra env for the child process
+	programArgs   []string          // extra args for the subprocess
 }
 
 type Manager struct {
@@ -88,8 +90,9 @@ func (m *Manager) Bootstrap() error {
 		}
 
 		m.instances[d.Manifest.Name] = &instance{
-			fsm:     fsm,
-			binPath: d.BinaryPath,
+			fsm:         fsm,
+			binPath:     d.BinaryPath,
+			programArgs: d.Manifest.Args,
 		}
 	}
 
@@ -99,10 +102,10 @@ func (m *Manager) Bootstrap() error {
 // Start spawns and handshakes the named plugin (triggered eagerly at boot pr lazily on first use)
 // a successful Start resets the crash-retry counter and arms crash supervision for this instance
 func (m *Manager) Start(ctx context.Context, name string) error {
-	return m.StartPlugin(ctx, name, false)
+	return m.startPlugin(ctx, name, false)
 }
 
-func (m *Manager) StartPlugin(ctx context.Context, name string, isRetry bool) error {
+func (m *Manager) startPlugin(ctx context.Context, name string, isRetry bool) error {
 	m.mu.Lock()
 	inst, ok := m.instances[name]
 	if ok && !isRetry {
@@ -121,7 +124,7 @@ func (m *Manager) StartPlugin(ctx context.Context, name string, isRetry bool) er
 	}
 
 	adapter := m.newAdapter(runtime.InstanceInfo{Name: name})
-	if err := adapter.Start(ctx, inst.binPath); err != nil {
+	if err := adapter.Start(ctx, inst.binPath, inst.programArgs, inst.env); err != nil {
 		_ = m.transition(inst, lifecycle.StateFailed)
 		return fmt.Errorf("manager: start %q: %w", name, err)
 	}
@@ -135,6 +138,9 @@ func (m *Manager) StartPlugin(ctx context.Context, name string, isRetry bool) er
 		_ = m.transition(inst, lifecycle.StateFailed)
 		return fmt.Errorf("manager: handshake %q: %w", name, err)
 	}
+
+	// TODO: validate info.ProtocolVersion against [minSupported, maxSupported]
+	// before accepting READY - this is where protocol compatibility is enforced
 
 	m.mu.Lock()
 	inst.adapter = adapter
@@ -180,7 +186,7 @@ func (m *Manager) watchCrash(name string, inst *instance, adapter runtime.Adapte
 	m.mu.Lock()
 	inst.retries++
 	m.mu.Unlock()
-	if err := m.StartPlugin(context.Background(), name, true); err != nil {
+	if err := m.startPlugin(context.Background(), name, true); err != nil {
 		_ = m.transition(inst, lifecycle.StateFailed)
 	}
 }
@@ -209,7 +215,7 @@ func (m *Manager) Stop(ctx context.Context, name string) error {
 	return m.transition(inst, lifecycle.StateStopped)
 }
 
-// Install resolves, downloard, verifies (checksum) and registers a plugin. without starting it.
+// Install resolves, download, verifies (checksum) and registers a plugin. without starting, it.
 // "bridge" never needs a restart for this to take effect.
 func (m *Manager) Install(ctx context.Context, name, versionConstraint string) error {
 	artifact, err := m.registry.Resolve(ctx, name, versionConstraint)
@@ -239,6 +245,9 @@ func (m *Manager) Install(ctx context.Context, name, versionConstraint string) e
 		ProtocolVersion: artifact.ProtocolVersion,
 		Binary:          filepath.Base(binPath),
 		SHA256:          artifact.SHA256,
+		// Capabilities are intentionally left empty here. It's only authoritative once the
+		// plugin declares it at handshake time.
+		Args: make([]string, 0), // TODO: populate this field by calling the right way (Important)
 	}
 
 	data, err := json.MarshalIndent(manifest, "", " ")
@@ -254,7 +263,7 @@ func (m *Manager) Install(ctx context.Context, name, versionConstraint string) e
 	_ = fsm.Transition(lifecycle.StateDisabled)
 
 	m.mu.Lock()
-	m.instances[name] = &instance{fsm: fsm, binPath: binPath}
+	m.instances[name] = &instance{fsm: fsm, binPath: binPath, programArgs: []string{"start"}}
 	m.mu.Unlock()
 
 	return m.persistRecord(name, artifact.Version, false)
@@ -331,6 +340,34 @@ func (m *Manager) Disable(ctx context.Context, name string) error {
 	}
 
 	return m.setEnabled(name, false)
+}
+
+// Dispense returns the client-side stub for a business service (see plugin.*Key constants in cli-bridge-plugin-sdk)
+// on an already READY plugin. Ex: CommentAndNoteService once Handshake's
+// Capabilities confirmed the plugin declares it. The caller is expected to have checked capabilities
+// first; Dispense itself doesn't fail just because the plugin didn't register that key, the real RPC
+// call on the returned client will, with 	 gRPC "Unimplemented" error.
+func (m *Manager) Dispense(name, key string) (any, error) {
+	m.mu.Lock()
+	inst, ok := m.instances[name]
+	m.mu.Unlock()
+	if !ok {
+		return nil, fmt.Errorf("manager: unknown plugin %q", name)
+	}
+
+	m.mu.Lock()
+	adapter := inst.adapter
+	m.mu.Unlock()
+	if adapter == nil {
+		return nil, fmt.Errorf("manager: %q is not started", name)
+	}
+
+	d, ok := adapter.(runtime.Dispenser)
+	if !ok {
+		return nil, fmt.Errorf("manager: adapter for %q does not support Dispense", name)
+	}
+
+	return d.Dispense(key)
 }
 
 func (m *Manager) transition(inst *instance, next lifecycle.State) error {

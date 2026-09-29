@@ -3,42 +3,98 @@ package runtime
 import (
 	"context"
 	"fmt"
+	"io"
+	"os"
 	"os/exec"
-	"sonarbridge-go/internal/plugin/pluginshared"
-	"sonarbridge-go/internal/plugin/proto/pluginv1"
 	"time"
 
+	"github.com/hashicorp/go-hclog"
 	goplugin "github.com/hashicorp/go-plugin"
+	"github.com/nivekalara237/ci-bridge-plugin-sdk/plugin"
+	pluginv1 "github.com/nivekalara237/ci-bridge-plugin-sdk/plugin/v1"
 )
 
+// GoPluginAdapter is the reak Adapter implementation: it spawns the plugin binary
+// as a subprocess and speaks gRPC to it over go-plugin's managed connection.
 type GoPluginAdapter struct {
 	client     *goplugin.Client
 	infoClient pluginv1.PluginInfoClient
+	rpcClient  goplugin.ClientProtocol
 	exited     chan struct{}
 	cmd        *exec.Cmd // kept so Pid() can report the real subprocess PID
+
+	Stdout io.Writer
+	Stderr io.Writer
 }
+
+// defaultArgs is the fallback when Start is called with no args: every
+// ci-bridge plugin binary is a small CLI, not a bare go-plugin server
+// — invoking it with no arguments prints usage and exits (so a human
+// running it by hand gets help instead of an opaque hung process
+// waiting on stdin for a handshake it will never receive). "start" is
+// the subcommand that actually calls plugin.Serve. This default exists
+// so a caller that forgets to pass args (or passes nil deliberately,
+// meaning "use the normal convention") doesn't silently reproduce that
+// failure mode.
+var defaultArgs = []string{"start"}
 
 func NewGoPluginAdapter() *GoPluginAdapter {
 	return &GoPluginAdapter{exited: make(chan struct{})}
 }
 
-func (a *GoPluginAdapter) Start(ctx context.Context, path string) error {
-	a.cmd = exec.Command(path)
+func (a *GoPluginAdapter) Start(ctx context.Context, path string, arguments []string, env map[string]string) error {
+
+	if len(arguments) == 0 {
+		arguments = defaultArgs
+	}
+	a.cmd = exec.Command(path, arguments...)
+	if len(env) > 0 {
+		// Extend the host's own environment rather than replacement it
+		// The plugin still needs PATH, HOME, etc. Any key here overrides the inherited value if
+		// it collides (last write wins in os/exec's Env, and these are appended last)
+		extra := make([]string, 0, len(env))
+		for k, v := range env {
+			extra = append(extra, k+"="+v)
+		}
+		a.cmd.Env = append(os.Environ(), extra...)
+	}
+
+	stdout, stderr := a.Stdout, a.Stderr
+	if stdout == nil {
+		stdout = os.Stdout
+	}
+
+	if stderr == nil {
+		stderr = os.Stderr
+	}
+
 	a.client = goplugin.NewClient(&goplugin.ClientConfig{
-		HandshakeConfig:  pluginshared.Handshake,
-		Plugins:          pluginshared.Map(nil),
+		HandshakeConfig:  plugin.Handshake,
+		Plugins:          plugin.HostPlugins(),
 		Cmd:              a.cmd,
 		AllowedProtocols: []goplugin.Protocol{goplugin.ProtocolGRPC},
-		AutoMTLS:         true,
+		// AutoMTLS:         true,
+		SkipHostEnv: false,
+		SyncStderr:  stderr,
+		SyncStdout:  stdout,
+		Logger: hclog.New(&hclog.LoggerOptions{
+			JSONFormat: false,
+			Level:      hclog.Trace,
+			Output:     os.Stdout,
+		}),
 	})
 
 	rpcClient, err := a.client.Client()
 	if err != nil {
+		fmt.Println(err)
+		fmt.Println(a.client.Protocol())
 		a.client.Kill()
 		return fmt.Errorf("goplugin: connect: %w", err)
 	}
 
-	raw, err := rpcClient.Dispense(pluginshared.PluginKey)
+	a.rpcClient = rpcClient
+
+	raw, err := rpcClient.Dispense(plugin.PluginKey)
 	if err != nil {
 		a.client.Kill()
 		return fmt.Errorf("goplugin: dispense: %w", err)
@@ -84,6 +140,7 @@ func (a *GoPluginAdapter) Handshake(ctx context.Context) (InstanceInfo, error) {
 		Version:         resp.GetVersion(),
 		ProtocolVersion: resp.ProtocolVersion,
 		Capabilities:    resp.Capabilities,
+		PluginType:      resp.PluginType,
 	}, nil
 }
 
@@ -106,6 +163,16 @@ func (a *GoPluginAdapter) Pid() int {
 	if a.cmd == nil || a.cmd.Process == nil {
 		return 0
 	}
-
 	return a.cmd.Process.Pid
+}
+
+// Dispense return the client-side stub go-plugin registered under key - for calling business
+// RPCs beyond the handshake. Only valid after Start has succeeded. The caller is expected to
+// have already checked, via Handshake's returned Capabilities, that the plugin actually implements
+// what this key maps to.
+func (a *GoPluginAdapter) Dispense(key string) (any, error) {
+	if a.rpcClient == nil {
+		return nil, fmt.Errorf("goplugin: not started")
+	}
+	return a.rpcClient.Dispense(key)
 }

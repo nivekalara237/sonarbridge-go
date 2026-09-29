@@ -18,6 +18,7 @@ type Extra struct {
 	Id         string   `json:"ID" yaml:"ID"`
 	Format     string   `json:"Format,omitempty" yaml:"Format,omitempty"`
 	ChecksumOf string   `json:"ChecksumOf,omitempty" yaml:"ChecksumOf,omitempty"`
+	Checksum   string   `json:"Checksum,omitempty" yaml:"Checksum,omitempty"`
 	WrappedIn  string   `json:"WrappedIn,omitempty" yaml:"WrappedIn,omitempty"`
 }
 
@@ -33,6 +34,19 @@ type Entry struct {
 	Goarch       string `json:"goarch,omitempty" yaml:"goarch,omitempty"`
 	Target       string `json:"target,omitempty" yaml:"target,omitempty"`
 	Extra        *Extra `json:"extra,omitempty" yaml:"extra,omitempty"`
+}
+
+type Metadata struct {
+	ProjectName string `json:"project_name" yaml:"project_name"`
+	Tag         string `json:"tag" yaml:"tag"`
+	PreviousTag string `json:"previous_tag" yaml:"previous_tag"`
+	Version     string `json:"version" yaml:"version"`
+	Commit      string `json:"commit" yaml:"commit"`
+	Date        string `json:"date" yaml:"date"`
+	Runtime     struct {
+		Goos   string `json:"goos" yaml:"goos"`
+		Goarch string `json:"goarch" yaml:"goarch"`
+	} `json:"runtime" yaml:"runtime"`
 }
 
 // Catalog is the parsed content of registry.yaml or registry.json

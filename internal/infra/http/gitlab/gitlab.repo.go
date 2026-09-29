@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"os"
 	"sonarbridge-go/configs"
 	"sonarbridge-go/internal/core/domain"
 	"sonarbridge-go/internal/core/interactor"
@@ -18,19 +19,17 @@ import (
 
 type Interactor struct {
 	interactor.GitlabInteractor
-	config configs.Config
 }
 
-func New(cfg configs.Config) *Interactor {
+func New() *Interactor {
 	return &Interactor{
 		GitlabInteractor: (*Interactor)(nil),
-		config:           cfg,
 	}
 }
 
 func (inter *Interactor) createHttpClient(ciToken string) (*http.Client, error) {
-	baseUrl := inter.config.GitlabBaseUrl
-	token := inter.config.GitlabToken
+	baseUrl := configs.AppConfig.VcsProviders[0].BaseUrl
+	token := os.Getenv(configs.AppConfig.VcsProviders[0].TokenEnvVar)
 	if baseUrl == "" || token == "" {
 		logging.Error("variable d'environnement GITLAB_API_URL ou GITLAB_TOKEN manquante")
 		return nil, errors.New("variable d'environnement GITLAB_API_URL ou GITLAB_TOKEN manquante")
@@ -38,7 +37,7 @@ func (inter *Interactor) createHttpClient(ciToken string) (*http.Client, error) 
 	if strings.TrimSpace(ciToken) != "" {
 		token = "ci;" + token
 	}
-	return http.NewClientHttp(strings.TrimRight(baseUrl, "/"), token, "gitlab", inter.config.GitlabCACert), nil
+	return http.NewClientHttp(strings.TrimRight(baseUrl, "/"), token, "gitlab", configs.AppConfig.VcsProviders[0].CacertFile), nil
 }
 
 func (inter *Interactor) CreateCommitStatus(ctx context.Context, projectId, sha, ciToken string, statusData domain.GitlabCommitStatus) (any, error) {

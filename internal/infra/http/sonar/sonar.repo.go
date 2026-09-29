@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"os"
 	"sonarbridge-go/configs"
 	"sonarbridge-go/internal/core/domain"
 	"sonarbridge-go/internal/core/domain/sonar"
@@ -14,19 +15,18 @@ import (
 	"sonarbridge-go/internal/infra/http"
 	"sonarbridge-go/internal/infra/utils"
 	"sonarbridge-go/internal/logging"
+	stringify "sonarbridge-go/pkg/string"
 	"strconv"
 	"strings"
 )
 
 type Interactor struct {
 	interactor.SonarInteractor
-	config configs.Config
 }
 
-func New(cfg configs.Config) *Interactor {
+func New() *Interactor {
 	return &Interactor{
 		SonarInteractor: (*Interactor)(nil),
-		config:          cfg,
 	}
 }
 
@@ -38,12 +38,12 @@ func (inter *Interactor) createHttpClient() (*http.Client, error) {
 	if sonarClient != nil {
 		return sonarClient, nil
 	}
-	baseUrl := inter.config.SonarBaseUrl
-	token := inter.config.SonarToken
+	baseUrl := configs.AppConfig.Sonar.BaseUrl
+	token := os.Getenv(configs.AppConfig.Sonar.TokenEnvVar)
 	if baseUrl == "" || token == "" {
-		return nil, errors.New("variable d'environnement SONARQUBE_URL ou SONARQUBE_TOKEN manquante")
+		return nil, errors.New("variable d'environnement SONARQUBE_URL ou " + configs.AppConfig.Sonar.TokenEnvVar + " manquante")
 	}
-	return http.NewClientHttp(strings.TrimRight(baseUrl, "/"), token, "sonar", inter.config.SonarCACert), nil
+	return http.NewClientHttp(strings.TrimRight(baseUrl, "/"), token, "sonar", configs.AppConfig.Sonar.CaCertFile), nil
 }
 
 func (inter *Interactor) GetTaskDetails(ctx context.Context, taskId string) (*domain.SonarTaskDetails, error) {
@@ -166,9 +166,9 @@ func (inter *Interactor) GetAnalysisDetails(ctx context.Context, projectKey, bra
 	}
 
 	urlb := strings.Builder{}
-	urlb.WriteString(strings.TrimRight(inter.config.SonarBaseUrl, "/api"))
+	urlb.WriteString(strings.TrimRight(configs.AppConfig.Sonar.BaseUrl, "/api"))
 	urlb.WriteString("/dashboard?codeScope=newcode&id=" + projectKey)
-	if inter.config.SonarEdition != configs.SONARQUBE_CE {
+	if configs.AppConfig.Sonar.Edition != stringify.ToString(configs.SONARQUBE_CE) {
 		urlb.WriteString("&branch=" + branch)
 	}
 
@@ -306,7 +306,7 @@ func (inter *Interactor) getIssuesIteration(client *http.Client, ctx context.Con
 	}
 
 	// paramètre Developer Edition+, ignioré silencieusement sans erreur
-	if inter.config.SonarEdition != configs.SONARQUBE_CE {
+	if configs.AppConfig.Sonar.Edition != stringify.ToString(configs.SONARQUBE_CE) {
 		issueParams.Add("branch", branch)
 	}
 

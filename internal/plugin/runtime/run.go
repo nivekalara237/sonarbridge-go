@@ -16,7 +16,7 @@ type Adapter interface {
 	// Start spawns the plugin process (or fake equivalent) at path and
 	// blocks until the transport is reachable (but before any business
 	// handshake happens)
-	Start(ctx context.Context, path string) error
+	Start(ctx context.Context, path string, arguments []string, env map[string]string) error
 
 	Handshake(ctx context.Context) (InstanceInfo, error)
 
@@ -30,4 +30,13 @@ type Adapter interface {
 	Stop(ctx context.Context) error
 
 	Pid() int
+}
+
+// Dispenser is implemented by Adapters that can hand back a client for
+// a business service beyond the handshake (GoPluginAdapter does;
+// FakeAdapter has nothing real to dispense). Checked via a type
+// assertion rather than added to Adapter itself, since not every
+// Adapter needs it.
+type Dispenser interface {
+	Dispense(key string) (any, error)
 }

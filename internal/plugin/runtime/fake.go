@@ -12,6 +12,7 @@ type FakeAdapter struct {
 	alive    bool
 	exited   chan struct{}
 	failNext bool
+	LastEnv  map[string]string
 }
 
 func NewFakeAdapter(info InstanceInfo) *FakeAdapter {
@@ -24,9 +25,10 @@ func (f *FakeAdapter) FailNextStart() {
 	f.failNext = true
 }
 
-func (f *FakeAdapter) Start(ctx context.Context, path string) error {
+func (f *FakeAdapter) Start(ctx context.Context, path string, arguments []string, env map[string]string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.LastEnv = env
 	if f.failNext {
 		f.failNext = false
 		return errors.New("fake: simulated start failure")

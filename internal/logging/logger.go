@@ -29,8 +29,8 @@ func Set(l *slog.Logger) {
 	logger = l
 }
 
-func InitServer(cfg configs.Config) error {
-	lv, err := GetLevel(cfg)
+func InitServer(level string) error {
+	lv, err := GetLevel(level)
 	if err != nil {
 		return nil
 	}
@@ -44,8 +44,8 @@ func InitServer(cfg configs.Config) error {
 	return nil
 }
 
-func InitCLI(cfg configs.Config) error {
-	lvl, err := GetLevel(cfg)
+func InitCLI(level string) error {
+	lvl, err := GetLevel(level)
 	if err != nil {
 		return err
 	}
@@ -67,7 +67,7 @@ func NewWithWriter(
 	json bool,
 ) (*slog.Logger, error) {
 
-	lvl, err := GetLevel(cfg)
+	lvl, err := GetLevel(cfg.LogLevel)
 	if err != nil {
 		return nil, err
 	}

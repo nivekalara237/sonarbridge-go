@@ -20,23 +20,29 @@ type ReleaseEntry struct {
 	} `json:"assets"`
 }
 
+type arguments struct {
+	port     int
+	addr     string
+	absAsset string
+}
+
+var args arguments
+
 func main() {
 	pwd, _ := os.Getwd()
-	var port int
-	var addr string
-	absAssetPath := flag.String("asset-path", pwd, "local-reg [--asset-path]")
-	flag.IntVar(&port, "port", 8077, "local-reg [--asset-path]")
-	flag.StringVar(&addr, "address", "localhost", "local-reg [--asset-path]")
+	flag.StringVar(&args.absAsset, "asset-path", pwd, "local-reg [--asset-path]")
+	flag.IntVar(&args.port, "port", 8077, "local-reg [--asset-path]")
+	flag.StringVar(&args.addr, "address", "localhost", "local-reg [--asset-path]")
 	flag.Parse()
 
-	server := localregistry.NewLocalRegistryServer(port, addr, *absAssetPath)
+	server := localregistry.NewLocalRegistryServer(args.port, args.addr, args.absAsset)
 
 	// curl --request GET localhost:8077/assets/binary/vcs-gitlab-latest -o  bitlab.bin
-	server.AddFileRoute("/assets/binary/{filename}", "GET", "filename")
+	server.AddFileRoute("/assets/binary/{filePath}", "GET", "filePath")
 	server.AddFileRoute("/assets/checksum/{filename}", "GET", "filename")
 	server.AddRoute("/releases/{version}", "POST", func(pvs ...string) any {
 		version := pvs[0]
-		dirs, err := os.ReadDir(fmt.Sprintf("%s/assets/binaries/%s", *absAssetPath, version))
+		dirs, err := os.ReadDir(fmt.Sprintf("%s/assets/binaries/gitlab/%s", args.absAsset, version))
 		if err != nil {
 			panic(err)
 		}
@@ -53,27 +59,33 @@ func main() {
 			}{
 				Id:         uuid.New().String(),
 				Name:       f.Name(),
-				Url:        fmt.Sprintf("%s/assets/binaries/%s/%s", *absAssetPath, version, f.Name()),
+				Url:        fmt.Sprintf("%s/assets/binaries/%s/%s", args.absAsset, version, f.Name()),
 				IsChecksum: strings.Contains(f.Name(), ".checksum.txt"),
 			})
 		}
 		return releases
 	})
-	server.AddRoute("/artifacts/{version}", "GET", func(pvs ...string) any {
-		version := pvs[0]
-
-		artifacts := ""
-		if version == "" || version == "latest" {
-			artifacts = "artifacts.json"
-		} else {
-			artifacts = version + "/artifacts.json"
-		}
-		file, _ := os.ReadFile(fmt.Sprintf("%s/assets/%s", *absAssetPath, artifacts))
-		var res any
-		if err := json.Unmarshal(file, &res); err != nil {
-			panic(err)
-		}
-		return res
-	})
+	server.AddRoute("/artifacts", "GET", fnGetArtifacts)
+	server.AddRoute("/artifacts/{version}", "GET", fnGetArtifacts)
 	server.Serve()
+}
+
+func fnGetArtifacts(pvs ...string) any {
+	var version string
+	if len(pvs) > 0 {
+		version = pvs[0]
+	}
+
+	artifacts := ""
+	if version == "" || version == "latest" {
+		artifacts = "artifacts.json"
+	} else {
+		artifacts = version + "/artifacts.json"
+	}
+	file, _ := os.ReadFile(fmt.Sprintf("%s/bin.local/assets/binaries/gitlab/%s", args.absAsset, artifacts))
+	var res any
+	if err := json.Unmarshal(file, &res); err != nil {
+		panic(err)
+	}
+	return res
 }

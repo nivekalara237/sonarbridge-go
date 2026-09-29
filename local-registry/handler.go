@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"regexp"
 	"strings"
@@ -27,7 +28,7 @@ func (s *LocalRegistryServer) AddRoute(uri, method string, f func(...string) any
 
 func (s *LocalRegistryServer) AddFileRoute(uri, method, filename string) {
 	s.serverMux.HandleFunc(fmt.Sprintf("%s /%s", strings.ToUpper(method), strings.TrimLeft(uri, "/")), func(writer http.ResponseWriter, req *http.Request) {
-		absAssetPath := s.absoluteAssetPath
+		absAssetPath := strings.TrimRight(s.absoluteAssetPath, "/")
 		if uri == "" {
 			pwd, err := os.Getwd()
 			if err != nil {
@@ -37,8 +38,9 @@ func (s *LocalRegistryServer) AddFileRoute(uri, method, filename string) {
 		}
 
 		reqFilename := req.PathValue(filename)
+		reqFilename, _ = url.QueryUnescape(reqFilename)
 
-		binary, err := os.ReadFile(fmt.Sprintf("%s/assets/binaries/%s", absAssetPath, reqFilename))
+		binary, err := os.ReadFile(fmt.Sprintf("%s/%s", absAssetPath, strings.TrimLeft(reqFilename, "/")))
 		if err != nil {
 			panic(err)
 		}

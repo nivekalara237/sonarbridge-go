@@ -13,6 +13,7 @@ type Info struct {
 	Dirty    bool
 	GoVer    string
 	Platform string
+	Name     string
 }
 
 func GetBuildInfo() Info {
@@ -22,14 +23,13 @@ func GetBuildInfo() Info {
 		Date:     Date,
 		GoVer:    runtime.Version(),
 		Platform: runtime.GOOS + "/" + runtime.GOARCH,
+		Name:     "bridge",
 	}
 
 	bi, ok := debug.ReadBuildInfo()
 	if !ok {
 		return i
 	}
-
-	fmt.Println(&bi)
 
 	if i.Version == "dev" && bi.Main.Version != "" && bi.Main.Version != "(devel)" {
 		i.Version = bi.Main.Version
@@ -58,7 +58,7 @@ func (i Info) ToCliString() string {
 	if i.Dirty {
 		v += "-salle"
 	}
-	return fmt.Sprintf("%s %s (%s, built %s) %s %s", "sonarbridge-cli", v, i.Commit, i.Date, i.GoVer, i.Platform)
+	return fmt.Sprintf("%s %s (%s, built %s) %s %s", i.Name+"-cli", v, i.Commit, i.Date, i.GoVer, i.Platform)
 }
 
 func (i Info) ToServerString() string {
@@ -66,5 +66,5 @@ func (i Info) ToServerString() string {
 	if i.Dirty {
 		v += "-salle"
 	}
-	return fmt.Sprintf("%s %s (%s, built %s) %s %s", "sonarbridge-server", v, i.Commit, i.Date, i.GoVer, i.Platform)
+	return fmt.Sprintf("%s %s (%s, built %s) %s %s", i.Name+"-server", v, i.Commit, i.Date, i.GoVer, i.Platform)
 }
