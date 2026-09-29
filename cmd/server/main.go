@@ -17,7 +17,6 @@ import (
 	"sonarbridge-go/internal/infra/entrypoints/rest"
 	"sonarbridge-go/internal/infra/repository/report"
 	"sonarbridge-go/internal/logging"
-	stringify "sonarbridge-go/pkg/string"
 	"strconv"
 	"time"
 )
@@ -49,16 +48,14 @@ func init() {
 		// var c = configs.AppConfig
 		var c = callableArgs[0].(configs.AppUntypedConfig)
 
-		fmt.Println("++++++++++++++++++")
-		fmt.Println(stringify.ToJSON(c))
-		// fmt.Println(stringify.ToJSON(callableArgs))
-		fmt.Println("++++++++++++++++++")
-
 		if err := logging.InitServer(c.Logging.Level); err != nil {
 			log.Fatal(err)
 		}
 
 		app := bootstrap.NewApp()
+		go func() {
+			app.Bootstrapping()
+		}()
 
 		/*er := app.InitPlugins()
 		if er != nil {

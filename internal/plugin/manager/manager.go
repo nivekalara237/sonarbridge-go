@@ -54,6 +54,8 @@ type Manager struct {
 	RestartBackoff []time.Duration
 
 	instances map[string]*instance
+
+	PluginEnv map[string]map[string]string
 }
 
 func New(pluginsDir string, store *state.Store, reg registry.Client, newAdapter func(info runtime.InstanceInfo) runtime.Adapter) *Manager {
@@ -93,6 +95,7 @@ func (m *Manager) Bootstrap() error {
 			fsm:         fsm,
 			binPath:     d.BinaryPath,
 			programArgs: d.Manifest.Args,
+			env:         m.PluginEnv[d.Manifest.Name],
 		}
 	}
 
@@ -263,7 +266,7 @@ func (m *Manager) Install(ctx context.Context, name, versionConstraint string) e
 	_ = fsm.Transition(lifecycle.StateDisabled)
 
 	m.mu.Lock()
-	m.instances[name] = &instance{fsm: fsm, binPath: binPath, programArgs: []string{"start"}}
+	m.instances[name] = &instance{fsm: fsm, binPath: binPath, env: m.PluginEnv[name], programArgs: []string{"start"}}
 	m.mu.Unlock()
 
 	return m.persistRecord(name, artifact.Version, false)

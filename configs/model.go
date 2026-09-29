@@ -44,9 +44,10 @@ type SonarCnf struct {
 }
 
 type VcsProviderCnf struct {
-	BaseUrl     string `json:"base_url" yaml:"base_url" mapstructure:"base_url"`
+	BaseUrl     string `json:"url" yaml:"url" mapstructure:"url"`
 	TokenEnvVar string `json:"token_env_var" yaml:"token_env_var" mapstructure:"token_env_var"`
 	Name        string `json:"name" yaml:"name" mapstructure:"name"`
+	BinaryName  string `json:"binary_name" yaml:"binary_name" mapstructure:"binary_name"`
 	Owner       string `json:"owner" yaml:"owner" mapstructure:"owner"`
 	Repo        string `json:"repo" yaml:"repo" mapstructure:"repo"`
 	CacertFile  string `json:"cacert_file" yaml:"cacert_file" mapstructure:"cacert_file"`
@@ -66,7 +67,8 @@ type PluginsCnf struct {
 type PluginRemoteRegistryCnf struct {
 	Enabled     bool   `json:"enabled" yaml:"enabled" mapstructure:"enabled"`
 	Type        string `json:"type" yaml:"type" mapstructure:"type"`
-	RepoPrefix  string `json:"repo_prefix" yaml:"repo_prefix" mapstructure:"repo_prefix"`
+	GithubRepo  string `json:"github_repo" yaml:"github_repo" mapstructure:"github_repo"`
+	GithubOwner string `json:"github_owner" yaml:"github_owner" mapstructure:"github_owner"`
 	TokenEnvVar string `json:"token_env_var" yaml:"token_env_var" mapstructure:"token_env_var"`
 	Username    string `json:"username" yaml:"username" mapstructure:"username"`
 	Password    string `json:"password" yaml:"password" mapstructure:"password"`
@@ -76,5 +78,4 @@ type PluginRemoteRegistryCnf struct {
 
 type TelemetryCnf struct {
 	Enabled bool `json:"enabled"`
-
 }

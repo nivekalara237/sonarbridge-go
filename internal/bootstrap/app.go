@@ -15,6 +15,7 @@ import (
 	"sonarbridge-go/internal/infra/http/sonar"
 	"sonarbridge-go/internal/infra/repository"
 	"sonarbridge-go/internal/infra/repository/report"
+	"sonarbridge-go/internal/logging"
 	"sonarbridge-go/internal/plugin/manager"
 	registry2 "sonarbridge-go/internal/plugin/registry"
 	"sonarbridge-go/internal/plugin/runtime"
@@ -46,6 +47,18 @@ func NewApp() *App {
 	}
 }
 
+func (a *App) Bootstrapping() {
+	logging.Info("Bootstrapping bridge application.")
+
+	if configs.AppConfig.Plugins.Dir != "" {
+		err := a.initPluginManager()
+		if err != nil {
+			panic(err)
+		}
+	}
+
+}
+
 func (a *App) InitPlugins() error {
 	root, err := os.MkdirTemp("", "sonarbridge-registry-install-*")
 	pluginName := "ci-bridge-vcs-gitlab"
@@ -74,7 +87,7 @@ func (a *App) InitPlugins() error {
 
 	fmt.Println("   installed - manifest + binary write on disk, checksum verified")
 
-	fmt.Println("enabling from boostrap (discovery what have been installed")
+	fmt.Println("enabling from boostrap (discovery what have been installed)")
 	if err := m.Enable(pluginName); err != nil {
 		return fmt.Errorf("enable: %w", err)
 	}

@@ -29,23 +29,26 @@ vcs_providers:
   - name: gitlab
     url: https://gitlab.nivekaa.com
     token_env_var: GITLAB_TOKEN
-  - name: github
-    url: https://github.com
-    token_env_var: GITHUB_TOKEN
-    owner: nivekalara237
-    repo: "sonarbridge-binary"
+    binary_name: ci-bridge-vcs-gitlab
+#  - name: github
+#    url: https://github.com
+#    token_env_var: GITHUB_TOKEN
+#    owner: nivekalara237
+#    BinaryName: ci-bridge-vcs-github
+#    repo: "sonarbridge-binary"
 plugins:
-  dir: ${home_dir}/plugins
-  state_file: ${home_dir}/state.json
-  local_registry_file: ${home_dir}/registry.json
+  dir: $HOME/.bridge/plugins
+  state_file: $HOME/.bridge/plugins/state.json
+  local_registry_file: $HOME/.bridge/plugins/registry.json
   remote_registry:
     enabled: true
-    type: github|http
-    repo_prefix: ci-bridge-vcs-
+    type: http #github|http
+    github_repo: ci-bridge-vcs
+    github_owner: nivekalara237
     token_env_var: GITHUB_TOKEN
     password: s3cr3t
     username: kali
-    host: https://registry.nivekaa.com
+    url: http://localhost:8077
     tls:
       cacert_file: ca.crt
 logging:
