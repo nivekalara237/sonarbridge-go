@@ -2,7 +2,7 @@ package service
 
 import (
 	"context"
-	"encoding/json/v2"
+	"errors"
 	"fmt"
 	"net/http"
 	"sonarbridge-go/internal/infra/utils"
@@ -59,24 +59,25 @@ func (s *CommentAndNoteService) createNewComment(ctx context.Context, projectId,
 		return nil, fmt.Errorf("the content of a note is limited to 1,000,000 characters")
 	}
 
-	data, _ := json.Marshal(map[string]string{"body": noteBody})
 	var httpResponse *http.Response
 	var err error
 	if nodeId == "" {
 		httpResponse, err = s.Client.Post(
 			ctx,
 			bPath(projectId, mergeRequestId),
-			&httpclient.RequestOptions{Body: data})
+			&httpclient.RequestOptions{Body: map[string]string{"body": noteBody}})
 	} else {
 		httpResponse, err = s.Client.Put(
 			ctx,
 			notePath(projectId, mergeRequestId, nodeId),
-			&httpclient.RequestOptions{Body: data})
+			&httpclient.RequestOptions{Body: map[string]string{"body": noteBody}})
 	}
 
 	if err != nil {
+		var ev *httpclient.ClientError
+		errors.As(err, &ev)
 		logging.Warn("échec de "+utils.Ternary(nodeId == "", "création", "mise à jour")+" du commentaire (commit note)", "merge_request_iid", mergeRequestId, "error", err)
-		return nil, fmt.Errorf("échec création du commentaire: [%w]", err)
+		return nil, fmt.Errorf("échec création du commentaire: %w, %s", err, ev.Message)
 	}
 
 	if httpclient.IsSuccess(httpResponse) {

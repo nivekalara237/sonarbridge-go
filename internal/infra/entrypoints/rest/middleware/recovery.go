@@ -8,9 +8,9 @@ import (
 )
 
 /**
- Sert à empêcher qu'un panic fasse planter tout ton serveur HTTP.
+ Sert à empêcher qu'un panic fasse planter tout le serveur HTTP.
 
- En cas de bug, tu obtiens la trace complète de la pile d'appels,
+ En cas de bug, on obtient la trace complète de la pile d'appels,
 	ce qui facilite énormément le diagnostic tout en évitant que le
 	serveur ne s'arrête.
 */

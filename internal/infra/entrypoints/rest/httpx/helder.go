@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"sonarbridge-go/internal/infra/entrypoints/rest/validation"
 	"sonarbridge-go/internal/logging"
 )
 
@@ -27,8 +28,17 @@ func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 		apiErr = ErrInternal.Wrap(err)
 	}
 
-	if apiErr.Status >= 500 {
-		slog.ErrorContext(r.Context(), "request failed", "code", apiErr.Code, "err", err, "path", r.URL.Path)
+	if apiErr.Status >= 400 {
+		slog.ErrorContext(r.Context(), "request failed", "code", apiErr.Code, "status_code", apiErr.Status, "err", err, "path", r.URL.Path)
+	}
+
+	if e, ok := errors.AsType[validation.ValidationError](apiErr.err); ok {
+		apiErr.SubErrors = []any{e}
+	}
+	if e, ok := errors.AsType[validation.ValidationErrors](apiErr.err); ok {
+		for _, er := range e.Errors {
+			apiErr.SubErrors = append(apiErr.SubErrors, er)
+		}
 	}
 
 	WriteJSON(w, apiErr.Status, errorBody{

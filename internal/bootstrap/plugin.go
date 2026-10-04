@@ -36,6 +36,7 @@ func (a *App) initPluginManager() error {
 	m := manager.New(rootDir, newStore, registryClient, func(info runtime.InstanceInfo) runtime.Adapter {
 		return runtime.NewGoPluginAdapter()
 	})
+	a.PluginManager = m
 
 	fmt.Println(`Manager.Install vcs plugin - Resolve + Fetch + real checksum verification`)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -45,21 +46,8 @@ func (a *App) initPluginManager() error {
 		return fmt.Errorf("boostrap: %w", err)
 	}
 
-	defer func() {
-		err := os.Unsetenv("GITLAB_BASE_URL")
-		if err != nil {
-
-		}
-		err = os.Unsetenv("GITLAB_TOKEN")
-		if err != nil {
-
-		}
-	}()
-
 	for _, provider := range vcsProviders {
-
 		pEnvMap := make(map[string]map[string]string)
-
 		if provider.Name == "gitlab" {
 			pEnvMap[provider.BinaryName] = map[string]string{
 				"GITLAB_TOKEN":    provider.TokenEnvVar,
@@ -86,14 +74,18 @@ func (a *App) initPluginManager() error {
 		}
 
 		fmt.Println("Start binary")
-		_ = os.Setenv("GITLAB_BASE_URL", provider.BaseUrl)
-		_ = os.Setenv("GITLAB_TOKEN", provider.BaseUrl)
 
 		if err := m.Start(context.Background(), provider.BinaryName); err != nil {
 			return fmt.Errorf("start: %w", err)
 		}
 
 		fmt.Printf("%s is started at %s", provider.Name, time.Now())
+	}
+
+	fmt.Println()
+
+	for _, s := range m.List() {
+		fmt.Printf("%s [%s] capabilities=%v\n\n", s.Name, s.State, s.Info.Capabilities)
 	}
 
 	return nil

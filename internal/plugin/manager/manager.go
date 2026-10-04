@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"sonarbridge-go/internal/plugin/discovery"
 	"sonarbridge-go/internal/plugin/lifecycle"
 	"sonarbridge-go/internal/plugin/registry"
@@ -350,7 +351,7 @@ func (m *Manager) Disable(ctx context.Context, name string) error {
 // Capabilities confirmed the plugin declares it. The caller is expected to have checked capabilities
 // first; Dispense itself doesn't fail just because the plugin didn't register that key, the real RPC
 // call on the returned client will, with 	 gRPC "Unimplemented" error.
-func (m *Manager) Dispense(name, key string) (any, error) {
+func (m *Manager) Dispense(name, key, requiredCapability string) (any, error) {
 	m.mu.Lock()
 	inst, ok := m.instances[name]
 	m.mu.Unlock()
@@ -360,9 +361,20 @@ func (m *Manager) Dispense(name, key string) (any, error) {
 
 	m.mu.Lock()
 	adapter := inst.adapter
+	fsmState := inst.fsm.Current()
+	caps := inst.info.Capabilities
 	m.mu.Unlock()
+
+	if fsmState != lifecycle.StateReady {
+		return nil, fmt.Errorf("manager: %q is not READY (state=%s)", name, fsmState)
+	}
+
 	if adapter == nil {
 		return nil, fmt.Errorf("manager: %q is not started", name)
+	}
+
+	if requiredCapability != "" && !hasCapability(caps, requiredCapability) {
+		return nil, fmt.Errorf("manager: %q does not declare capability %q(has %v)", name, requiredCapability, caps)
 	}
 
 	d, ok := adapter.(runtime.Dispenser)
@@ -386,6 +398,10 @@ func (m *Manager) persistRecord(name, version string, enabled bool) error {
 	}
 	records[name] = state.PluginRecord{Name: name, Version: version, Enabled: enabled}
 	return m.store.Save(records)
+}
+
+func hasCapability(capa []string, want string) bool {
+	return slices.Contains(capa, want)
 }
 
 func (m *Manager) setEnabled(name string, enabled bool) error {

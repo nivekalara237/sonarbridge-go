@@ -41,7 +41,7 @@ type Option func(*Client)
 
 type RetryConfig struct {
 	MaxRetries int
-	Backoff    time.Duration // durée de base pour l'exponentiel
+	Backoff    time.Duration // Durée de base pour l'exponentiel
 	RetryOn    func(resp *http.Response, err error) bool
 }
 
@@ -118,12 +118,12 @@ func WithTLSCACertFile(caCertFile string) Option {
 		if err != nil {
 			panic(err)
 		}
-		c.httpClient.Transport = &http.Transport{
-			TLSClientConfig: &tls.Config{
-				RootCAs:    ca,
-				MinVersion: tls.VersionTLS12,
-			},
+		tr, ok := c.httpClient.Transport.(*http.Transport)
+		if !ok || tr == nil {
+			tr = http.DefaultTransport.(*http.Transport).Clone()
 		}
+		tr.TLSClientConfig = &tls.Config{RootCAs: ca, MinVersion: tls.VersionTLS12}
+		c.httpClient.Transport = tr
 	}
 }
 
@@ -163,9 +163,14 @@ func (c *Client) Do(ctx context.Context, method, path string, opts *RequestOptio
 		if data, ok := c.cache.Get(cacheKey); ok {
 			// Retourner une réponse simulée avec le corps caché
 			resp := &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(bytes.NewReader(data)),
-				Header:     make(http.Header),
+				StatusCode:    http.StatusOK,
+				Body:          io.NopCloser(bytes.NewReader(data)),
+				Header:        make(http.Header),
+				Status:        http.StatusText(http.StatusOK),
+				Proto:         "HTTP.1.1/1",
+				ProtoMajor:    1,
+				ProtoMinor:    1,
+				ContentLength: int64(len(data)),
 			}
 			resp.Header.Set("Content-Type", "application/octet-stream")
 			return resp, nil
@@ -186,11 +191,26 @@ func (c *Client) Do(ctx context.Context, method, path string, opts *RequestOptio
 			body = strings.NewReader(opts.Form.Encode())
 			contentType = "application/x-www-form-urlencoded"
 		case opts.Body != nil:
-			jsonData, err := json.Marshal(opts.Body)
-			if err != nil {
-				return nil, err
+			var bs []byte
+			switch v := opts.Body.(type) {
+			case nil:
+				bs = []byte{}
+			case []byte:
+				bs = v
+			case string:
+				bs = []byte(v)
+			case io.Reader:
+				bs, err = io.ReadAll(v)
+				if err != nil {
+					return nil, err
+				}
+			default:
+				bs, err = json.Marshal(v)
+				if err != nil {
+					return nil, err
+				}
 			}
-			body = bytes.NewReader(jsonData)
+			body = bytes.NewReader(bs)
 			contentType = "application/json"
 		}
 	}
@@ -207,11 +227,11 @@ func (c *Client) Do(ctx context.Context, method, path string, opts *RequestOptio
 	if opts != nil && len(opts.Headers) > 0 {
 		for _, kv := range opts.Headers {
 			if arrays.IsArrayOrSlice(kv.Value) {
-				ar_v := make([]string, len(kv.Value.([]any)))
+				arV := make([]string, 0, len(kv.Value.([]any)))
 				for _, s := range kv.Value.([]any) {
-					ar_v = append(ar_v, stringify.ToString(s))
+					arV = append(arV, stringify.ToString(s))
 				}
-				req.Header[kv.Key] = ar_v
+				req.Header[kv.Key] = arV
 			} else {
 				req.Header[kv.Key] = []string{stringify.ToString(kv.Value)}
 			}
@@ -268,7 +288,12 @@ func (c *Client) buildURL(path string, opts *RequestOptions) (*url.URL, error) {
 	// Base
 	var u *url.URL
 	if c.baseURL != nil {
-		u = c.baseURL.ResolveReference(&url.URL{Path: path})
+		// u = c.baseURL.ResolveReference(&url.URL{Path: path})
+		base := *c.baseURL
+		if !strings.HasSuffix(base.Path, "/") {
+			base.Path += "/"
+		}
+		u = base.ResolveReference(&url.URL{Path: strings.TrimPrefix(path, "/")})
 	} else {
 		var err error
 		u, err = url.Parse(path)
@@ -295,11 +320,30 @@ func (c *Client) buildURL(path string, opts *RequestOptions) (*url.URL, error) {
 }
 
 func (c *Client) doWithRetry(req *http.Request) (*http.Response, error) {
+	var bodyBytes []byte
+	if req.Body != nil {
+		var err error
+		bodyBytes, err = io.ReadAll(req.Body)
+		req.Body.Close()
+		if err != nil {
+			return nil, err
+		}
+	}
 	var lastErr error
 	var lastResponse *http.Response
 	for attempt := 0; attempt <= c.retry.MaxRetries; attempt++ {
 		// Cloner la requête pour réutiliser le corps (important si body non rejouable)
 		reqClone := req.Clone(req.Context())
+		if bodyBytes != nil {
+			// Réinitialiser le corps en le relisant depuis le buffer d'origine
+			// Ici, on suppose que le body est un *bytes.Reader ou *strings.Reader (réutilisable)
+			// Pour plus de robustesse, vous pouvez stocker le corps original et le réassigner.
+			reqClone.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+			reqClone.ContentLength = int64(len(bodyBytes))
+			reqClone.GetBody = func() (io.ReadCloser, error) {
+				return io.NopCloser(bytes.NewReader(bodyBytes)), nil
+			}
+		}
 		if req.Body != nil {
 			// Réinitialiser le corps en le relisant depuis le buffer d'origine
 			// Ici, on suppose que le body est un *bytes.Reader ou *strings.Reader (réutilisable)
@@ -331,9 +375,17 @@ func (c *Client) doWithRetry(req *http.Request) (*http.Response, error) {
 			}
 		}
 	}
+	if lastResponse != nil {
+		return nil, &ClientError{
+			StatusCode: lastResponse.StatusCode,
+			Status:     lastResponse.Status,
+			Message:    lastErr.Error(),
+			Body:       nil,
+		}
+	}
 	return nil, &ClientError{
-		StatusCode: lastResponse.StatusCode,
-		Status:     lastResponse.Status,
+		StatusCode: http.StatusInternalServerError,
+		Status:     http.StatusText(http.StatusInternalServerError),
 		Message:    lastErr.Error(),
 		Body:       nil,
 	}

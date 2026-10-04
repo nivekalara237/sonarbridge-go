@@ -27,8 +27,8 @@ sonar:
   edition: community
 vcs_providers:
   - name: gitlab
-    url: https://gitlab.nivekaa.com
-    token_env_var: GITLAB_TOKEN
+    url: https://gitlab.nivekaa.com/api/v4
+    token_env_var: glpat-n8KGKANyEGiTGNhCUuXZZW86MQp1OjEH.01.0w11g6tiz
     binary_name: ci-bridge-vcs-gitlab
 #  - name: github
 #    url: https://github.com

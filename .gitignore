@@ -34,3 +34,4 @@ bin.local/
 
 ./config.toml
 ./config.yaml
+config.yaml
