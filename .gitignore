@@ -32,6 +32,5 @@ devops/
 dist/
 bin.local/
 
-./config.toml
-./config.yaml
+config.toml
 config.yaml

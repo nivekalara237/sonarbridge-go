@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // Manifest is the metadata writen by registry.Install alongside the
@@ -39,7 +40,7 @@ func Scan(pluginDir string) (found []Discovered, errs []error) {
 	}
 
 	for _, entry := range entries {
-		if !entry.IsDir() {
+		if !entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
 			continue
 		}
 
