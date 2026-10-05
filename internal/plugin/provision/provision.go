@@ -14,15 +14,14 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
- 
+
 	"sonarbridge-go/internal/plugin/discovery"
 	"sonarbridge-go/internal/plugin/lifecycle"
 	"sonarbridge-go/internal/plugin/manager"
 )
 
-
 type Desired struct {
-	Name string
+	Name    string
 	Version string
 }
 
@@ -44,20 +43,19 @@ const (
 
 // Result is the outcome for one desired plugin. A non-nil Err means the plugin is degraded; Stage says at which step.
 type Result struct {
-	Name string
-	Version string
+	Name      string
+	Version   string
 	Installed bool
-	Stage State
-	Err error
+	Stage     Stage
+	Err       error
 }
 
 type Provisioner struct {
-	PluginDir string
-	Manager Manager
+	PluginDir      string
+	Manager        Manager
 	InstallTimeout time.Duration
-	Log *slog.Logger
+	Log            *slog.Logger
 }
-
 
 // Run provisions every desired plugin, in order, and returns one Result each.
 // It never stops at a failure: that is the degraded mode.
@@ -72,8 +70,6 @@ func (p *Provisioner) Run(ctx context.Context, desired []Desired) []Result {
 	return results
 }
 
-
-
 // Orphans lists plugins present on disk that the configuration no longer
 // asks for. They are left alone, removing a binary is not startup's call and
 // so the caller can warn about them.
@@ -87,7 +83,7 @@ func (p *Provisioner) Orphans(desired []Desired) []string {
 	found, _ := discovery.Scan(p.PluginDir)
 	var orphans []string
 	for _, f := range found {
-		if _, ok := want[f.manifest.Name]; !ok {
+		if _, ok := want[f.Manifest.Name]; !ok {
 			orphans = append(orphans, f.Manifest.Name)
 		}
 	}
@@ -95,10 +91,9 @@ func (p *Provisioner) Orphans(desired []Desired) []string {
 	return orphans
 }
 
-
 func (p *Provisioner) provision(ctx context.Context, d Desired) Result {
-	res := Result{ Name: d.Name, Version: d.Version}
-	log := p.Log().With("plugin", d.Name, "Version", d.Version)
+	res := Result{Name: d.Name, Version: d.Version}
+	log := p.Log.With("plugin", d.Name, "Version", d.Version)
 
 	if reason := p.installReason(d); reason != "" {
 		log.Info("installing plugin", "reason", reason)
@@ -110,7 +105,7 @@ func (p *Provisioner) provision(ctx context.Context, d Desired) Result {
 
 		if err != nil {
 			log.Error("plugin install failed", "error", err)
-			res.State, res.Err = StageInstall, err
+			res.Stage, res.Err = StageInstall, err
 			return res
 		}
 		res.Installed = true
@@ -120,7 +115,7 @@ func (p *Provisioner) provision(ctx context.Context, d Desired) Result {
 
 	state, ok := p.stateOf(d.Name)
 	if !ok {
-		res.Stage, res.Err = StateEnabled, fmt.Errorf("provison: %q is unknown to the manager", d.Name)
+		res.Stage, res.Err = StageEnable, fmt.Errorf("provison: %q is unknown to the manager", d.Name)
 		return res
 	}
 
@@ -144,9 +139,8 @@ func (p *Provisioner) provision(ctx context.Context, d Desired) Result {
 	return res
 }
 
-
 func (p *Provisioner) installReason(d Desired) string {
-	version, problem := inspectInstalled(p.pluginDir, d.Name)
+	version, problem := inspectInstalled(p.PluginDir, d.Name)
 	if problem != "" {
 		return problem
 	}
@@ -157,7 +151,6 @@ func (p *Provisioner) installReason(d Desired) string {
 
 	return ""
 }
-
 
 func (p *Provisioner) stateOf(name string) (lifecycle.State, bool) {
 	for _, s := range p.Manager.List() {
@@ -208,20 +201,20 @@ func inspectInstalled(pluginDir, name string) (version, problem string) {
 	}
 
 	var mf discovery.Manifest
-	if err := json.Unmashal(data, &mf); err != nill {
+	if err := json.Unmarshal(data, &mf); err != nil {
 		return "", fmt.Sprintf("manifest invalid: %v", err)
 	}
 
 	switch {
 	case mf.Name != name:
 		return "", fmt.Sprintf("manifest names %q, expected %q", mf.Name, name)
-	case mf.Binary == "" || mf.Binary == "." || mf.Binary == ".." || strings.ContainsAny(mf.Binary, '/\'):
+	case mf.Binary == "" || mf.Binary == "." || mf.Binary == ".." || strings.ContainsAny(mf.Binary, `/\`):
 		return "", "manifest binary must be a bare file name"
 	case mf.SHA256 == "":
 		return "", "manifest records no checksum"
 	}
 
-	sm, err := fileSHA256(filepath.Join(dir, mf.Binary))
+	sum, err := fileSHA256(filepath.Join(dir, mf.Binary))
 	if errors.Is(err, fs.ErrNotExist) {
 		return "", "binary missing"
 	}
@@ -234,7 +227,7 @@ func inspectInstalled(pluginDir, name string) (version, problem string) {
 		return "", "binary does not match its recorded checksum"
 	}
 
-	return mt.Version, ""
+	return mf.Version, ""
 }
 
 func fileSHA256(path string) (string, error) {
@@ -250,5 +243,5 @@ func fileSHA256(path string) (string, error) {
 		return "", err
 	}
 
-	return hex.EncodeToString(h.Sum(nil)), nill
+	return hex.EncodeToString(h.Sum(nil)), nil
 }

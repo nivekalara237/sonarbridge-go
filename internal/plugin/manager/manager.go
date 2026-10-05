@@ -103,7 +103,6 @@ func (m *Manager) Bootstrap() error {
 			binPath:     d.BinaryPath,
 			programArgs: d.Manifest.Args,
 			env:         m.PluginEnv[d.Manifest.Name],
-			programArgs: defaultProgramArgs
 		}
 	}
 
@@ -239,15 +238,15 @@ func (m *Manager) Install(ctx context.Context, name, versionConstraint string) e
 		return fmt.Errorf("manager: fetch %q: %w", name, err)
 	}
 
-	removeStateStaging(m.pluginDir, name)
-	staging, err := os.MkdirTemp(m.pluginDir, stagingPrefix+name+"-")
+	removeStateStaging(m.pluginsDir, name)
+	staging, err := os.MkdirTemp(m.pluginsDir, stagingPrefix+name+"-")
 	if err != nil {
 		return fmt.Errorf("manager: install %q: %w", name, err)
 	}
 
 	defer os.RemoveAll(staging)
 
-	stagdBin, err := m.registry.Fetch(ctx, artifact, staging)
+	stagedBin, err := m.registry.Fetch(ctx, artifact, staging)
 	if err != nil {
 		return fmt.Errorf("manager: fetch %sq: %w", name, err)
 	}
@@ -257,12 +256,12 @@ func (m *Manager) Install(ctx context.Context, name, versionConstraint string) e
 		return fmt.Errorf("manager: fetch %q: %w", name, err)
 	}*/
 
-	if err := m.verifyChecksum(stagdBin, artifact.SHA256); err != nil {
+	if err := m.verifyChecksum(stagedBin, artifact.SHA256); err != nil {
 		// _ = os.RemoveAll(dir)
 		return fmt.Errorf("manager: install %q: %w", name, err)
 	}
 
-	dir := filepath.Join(m.pluginsDir, name)
+	dir = filepath.Join(m.pluginsDir, name)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("manager: install %q: %w", name, err)
 	}
@@ -275,7 +274,7 @@ func (m *Manager) Install(ctx context.Context, name, versionConstraint string) e
 	manifest := discovery.Manifest{
 		Name:            artifact.Name,
 		Version:         artifact.Version,
-		Type:            artifact.Type,
+		Type:            "vcs",
 		ProtocolVersion: artifact.ProtocolVersion,
 		Binary:          filepath.Base(binPath),
 		SHA256:          artifact.SHA256,
@@ -479,11 +478,13 @@ func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
 		_ = os.Remove(tmp)
 		return err
 	}
+
+	return nil
 }
 
-func removeStateStaging(pluginDir, name string string) {
+func removeStateStaging(pluginDir, name string) {
 	stale, _ := filepath.Glob(filepath.Join(pluginDir, stagingPrefix+name+"-*"))
-	for _, d:= range stale {
+	for _, d := range stale {
 		_ = os.RemoveAll(d)
 	}
 }
