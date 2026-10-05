@@ -6,11 +6,12 @@ import (
 )
 
 type APIError struct {
-	Status  int    `json:"statusCode"`
-	Code    string `json:"code"`
-	Message string `json:"message"`
-	Details any    `json:"details,omitempty"`
-	err     error
+	Status    int    `json:"statusCode"`
+	Code      string `json:"code"`
+	Message   string `json:"message"`
+	Details   any    `json:"details,omitempty"`
+	err       error
+	SubErrors []any
 }
 
 func (e *APIError) Error() string {

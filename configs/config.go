@@ -179,7 +179,6 @@ func SetDefaults() {
 	Vconfig.SetDefault("plugins.state_file", homeDir+"/plugins/state.json")
 	Vconfig.SetDefault("plugins.local_registry_file", homeDir+"/plugins/registry.json")
 	Vconfig.SetDefault("plugins.remote_registry.type", "http")
-	Vconfig.SetDefault("plugins.remote_registry.type", "http")
 	Vconfig.SetDefault("plugins.remote_registry.enabled", "true")
 	Vconfig.SetDefault("plugins.remote_registry.url", "http://localhost:8077")
 	Vconfig.SetDefault("logging.level", "info")

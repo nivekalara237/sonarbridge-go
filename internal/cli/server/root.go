@@ -30,7 +30,6 @@ func New() *RootCmd {
 var configFile string
 
 func init() {
-	fmt.Println("=========== Inside Root ========")
 	cobra.OnInitialize(initConfig)
 
 	rootCmd.PersistentFlags().StringVarP(&configFile, "config",

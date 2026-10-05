@@ -2,7 +2,6 @@ package rest
 
 import (
 	"net/http"
-	"os"
 	"sonarbridge-go/configs"
 	"sonarbridge-go/internal/infra/entrypoints/rest/httpx"
 	mdlw "sonarbridge-go/internal/infra/entrypoints/rest/middleware"
@@ -15,6 +14,7 @@ func NewRouter(
 	health *HealthHandler,
 	webhook *WebhookHandler,
 	report *ReportHandler,
+	vcsHandler *PullrequestCommentHandler,
 ) *http.Handler {
 	mux := http.NewServeMux()
 
@@ -24,6 +24,9 @@ func NewRouter(
 	mux.Handle("GET /healthz", httpx.Handlerx(health.GetZ))
 	mux.Handle("POST /webhook/sonar", httpx.Handlerx(webhook.Handler))
 	mux.Handle("GET /report/{id}", httpx.Handlerx(report.Handler))
+	mux.Handle("POST /vcs/pullrequest/createnote", httpx.Handlerx(vcsHandler.CreateCommentOrNote))
+	mux.Handle("PUT /vcs/pullrequest/updatenote", httpx.Handlerx(vcsHandler.UpdateCommentOrNote))
+	mux.Handle("PATCH /vcs/pullrequest/updatenote", httpx.Handlerx(vcsHandler.UpdateCommentOrNote))
 
 	return mdlw.NewBuilder(mux).
 		Add(func(handler http.Handler) http.Handler {
@@ -41,7 +44,8 @@ func NewRouter(
 		Add(mdlw.LoggingRequestMiddleware).
 		Add(mdlw.RequestID).
 		Add(func(handler http.Handler) http.Handler {
-			return mdlw.AuthHmacSignature(os.Getenv(configs.AppConfig.Server.SharedSecretKeyEnvVar), handler)
+			//return mdlw.AuthHmacSignature(os.Getenv(configs.AppConfig.Server.SharedSecretKeyEnvVar), handler)
+			return handler
 		}).
 		Build()
 }

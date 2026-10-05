@@ -15,20 +15,21 @@ import (
 	"sonarbridge-go/internal/cli/server"
 	"sonarbridge-go/internal/core/usecase"
 	"sonarbridge-go/internal/infra/entrypoints/rest"
+	"sonarbridge-go/internal/infra/grpc"
 	"sonarbridge-go/internal/infra/repository/report"
 	"sonarbridge-go/internal/logging"
-	stringify "sonarbridge-go/pkg/string"
 	"strconv"
 	"time"
 )
 
 const banner = `
-  ____   ___  _   _    _    ____      ____  ____   ___ _____   ____   ___   _____ 
- / ___| / _ \| \ | |  / \  |  _ \    | __ )|  _ \_ _|  __ \ | |  _ \ / _ \ | ____|
- \___ \| | | |  \| | / _ \ | |_) |   |  _ \| |_) | || |__) || | |_) | | | ||  _|  
-  ___) | |_| | |\  |/ ___ \|  _ <    | |_) |  __/| ||  _  / | |  _ <| |_| || |___ 
- |____/ \___/|_| \_/_/   \_\_| \_\   |____/|_|  |___|_| \_\ | |_| \_\\___/ |_____|
-                                                                                   
+
+####  ####  ##### ####   #### #####        #### #####
+#   # #   #   #   #   # #     #           #       #
+####  ####    #   #   # # ### ####  ##### #       #
+#   # #  #    #   #   # #   # #           #       #
+####  #   # ##### ####   #### #####        #### #####
+
 SONARBRIDE-GO :: Application Started :: Go`
 
 const KeyServerAddr = "KeyAddr"
@@ -49,31 +50,23 @@ func init() {
 		// var c = configs.AppConfig
 		var c = callableArgs[0].(configs.AppUntypedConfig)
 
-		fmt.Println("++++++++++++++++++")
-		fmt.Println(stringify.ToJSON(c))
-		// fmt.Println(stringify.ToJSON(callableArgs))
-		fmt.Println("++++++++++++++++++")
-
 		if err := logging.InitServer(c.Logging.Level); err != nil {
 			log.Fatal(err)
 		}
 
 		app := bootstrap.NewApp()
-
-		/*er := app.InitPlugins()
-		if er != nil {
-			fmt.Println("///////  Error Plugin ////////")
-			fmt.Println(er)
-			fmt.Println("/////// ////////////// ////////")
-		}*/
+		// bootstrapping app: init plugin,
+		app.Bootstrapping()
 		healthHandler := rest.NewHealthHandler()
 		webhookHandler := rest.NewWebhookHandler(app.Service)
+		vcsHandler := rest.NewPullrequestComment(grpc.NewVcs(app.PluginManager))
 		reportHandler := rest.NewReportHandler(usecase.NewReportService(report.NewRepository()))
 
 		router := rest.NewRouter(
 			healthHandler,
 			webhookHandler,
 			reportHandler,
+			vcsHandler,
 		)
 
 		muxDocs := http.NewServeMux()

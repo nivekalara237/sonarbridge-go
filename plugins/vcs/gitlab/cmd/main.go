@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"log"
@@ -17,41 +16,36 @@ import (
 
 	"github.com/hashicorp/go-hclog"
 	goplugin "github.com/hashicorp/go-plugin"
-	"github.com/nivekalara237/ci-bridge-plugin-sdk/capability"
 	"github.com/nivekalara237/ci-bridge-plugin-sdk/plugin"
-	pluginv1 "github.com/nivekalara237/ci-bridge-plugin-sdk/plugin/v1"
+	"github.com/nivekalara237/ci-bridge-plugin-sdk/plugin/shared"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 )
 
-var logger = hclog.New(&hclog.LoggerOptions{
-	Output:     os.Stderr,
-	Level:      hclog.Debug, // jamais stdout
-	JSONFormat: true,
-	Name:       "Gitlab-Plugin",
-})
+var logger hclog.Logger
 
-type infoServer struct {
-	pluginv1.UnimplementedPluginInfoServer
-}
+/*
+	type infoServer struct {
+		pluginv1.UnimplementedPluginInfoServer
+	}
 
-func (s *infoServer) GetInfo(ctx context.Context, req *pluginv1.GetInfoRequest) (*pluginv1.InfoResponse, error) {
-	return &pluginv1.InfoResponse{
-		Name:            build.Name,
-		Version:         build.Version,
-		PluginType:      "vcs",
-		ProtocolVersion: build.ProtocolVersion,
-		Capabilities: []string{
-			capability.PullRequestCreateComment,
-			capability.PullRequestDeleteComment,
-			capability.PullRequestUpdateComment,
-			capability.Issue,
-			capability.Webhook,
-			capability.Artifact,
-		},
-	}, nil
-}
-
+	func (s *infoServer) GetInfo(ctx context.Context, req *pluginv1.GetInfoRequest) (*pluginv1.InfoResponse, error) {
+		return &pluginv1.InfoResponse{
+			Name:            build.Name,
+			Version:         build.Version,
+			PluginType:      "vcs",
+			ProtocolVersion: build.ProtocolVersion,
+			Capabilities: []string{
+				capability.PullRequestCreateComment,
+				capability.PullRequestDeleteComment,
+				capability.PullRequestUpdateComment,
+				capability.Issue,
+				capability.Webhook,
+				capability.Artifact,
+			},
+		}, nil
+	}
+*/
 var rootCommand = &cobra.Command{
 	Use:           "gitlab-vcs [-c config.yaml] start",
 	SilenceUsage:  true,
@@ -59,9 +53,6 @@ var rootCommand = &cobra.Command{
 }
 
 func main() {
-	logging.SetOutput(os.Stderr)
-	slogLogger := logging.NewLogger(logger)
-	slog.SetDefault(slogLogger)
 
 	logFile, err := os.OpenFile("gitlab-plugin.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
 	if err != nil {
@@ -71,6 +62,18 @@ func main() {
 	defer logFile.Close()
 
 	multi := io.MultiWriter(os.Stderr, logFile)
+
+	logger = hclog.New(&hclog.LoggerOptions{
+		Output:     multi,
+		Level:      hclog.Debug, // jamais stdout
+		JSONFormat: true,
+		Name:       "Gitlab-Plugin",
+	})
+
+	logging.SetOutput(multi)
+	slogLogger := logging.NewLogger(logger)
+	slog.SetDefault(slogLogger)
+
 	log.SetOutput(multi)
 
 	if err := rootCommand.Execute(); err != nil {
@@ -103,18 +106,40 @@ func runStart(cmd *cobra.Command, args []string) error {
 	options = append(options, httpclient.WithRetry(3, 500*time.Millisecond))
 	options = append(options, httpclient.WithCache(httpclient.NewInMemoryCache()))
 	options = append(options, httpclient.WithDefaultHeader("PRIVATE-TOKEN", config.Token))
-	client := httpclient.NewClientHttp()
+
+	if config.CACertPath != "" {
+		options = append(options, httpclient.WithTLSCACertFile(config.CACertPath))
+	}
+
+	client := httpclient.NewClientHttp(options...)
 	commentService := service.NewCommentAndNoteService(client)
 	pullrequestService := service.NewPullrequestService(client)
+
+	// TODO: for test
+	//plugins, err := plugin.PluginServer(
+	//	plugin.Meta{Name: "fake-vcs", Version: "0.0.1", PluginType: "vcs", ProtocolVersion: 1},
+	//	plugin.PServerEntry{Key: "repository_stub", Capability: capability.Repository, ServerImpl: &repoStub{}},
+	//)
+	plugins, err := plugin.PluginServer(
+		plugin.Meta{
+			Name:            build.Name,
+			Version:         build.Version,
+			PluginType:      "vcs",
+			ProtocolVersion: 1,
+		},
+		shared.CommentAndNote(commentService),
+		shared.Pullrequest(pullrequestService),
+	)
+
+	if err != nil {
+		return fmt.Errorf("build plugin: %w", err)
+	}
+
 	serveConfig := &goplugin.ServeConfig{
 		HandshakeConfig: plugin.Handshake,
 		GRPCServer:      grpcServer,
-		Plugins: plugin.PluginServer(
-			plugin.PServerEntry{Key: plugin.PluginKey, ServerImpl: &plugin.InfoGRPCPlugin{Impl: &infoServer{}}},
-			plugin.PServerEntry{Key: plugin.CommentAndNoteKey, ServerImpl: &plugin.CommentAndNoteGRPCPlugin{Impl: commentService}},
-			plugin.PServerEntry{Key: plugin.PullrequestKey, ServerImpl: &plugin.PullrequestGRPCPlugin{Impl: pullrequestService}},
-		),
-		Logger: logger,
+		Plugins:         plugins,
+		Logger:          logger,
 	}
 	logger.Debug("serve config:", "grpc_server_nil", serveConfig.GRPCServer == nil)
 	goplugin.Serve(serveConfig)

@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"sonarbridge-go/internal/plugin/discovery"
 	"sonarbridge-go/internal/plugin/lifecycle"
 	"sonarbridge-go/internal/plugin/registry"
@@ -30,8 +31,14 @@ var defaultRestartBackoff = []time.Duration{
 	16 * time.Second,
 }
 
-// instance bundles everything the Manager tracks for one plugin, running or not
+var defaultProgramArgs = []string{"start"}
 
+// stagingPrefix marks scratch directories inside the plugins directory.
+// Discovery skips every dot-prefixed directory, so a staging directory
+// left behind by a crash is never mistaken for a plugin.
+const stagingPrefix = ".staging-"
+
+// instance bundles everything the Manager tracks for one plugin, running or not
 type instance struct {
 	fsm           *lifecycle.FSM
 	adapter       runtime.Adapter
@@ -54,6 +61,8 @@ type Manager struct {
 	RestartBackoff []time.Duration
 
 	instances map[string]*instance
+
+	PluginEnv map[string]map[string]string
 }
 
 func New(pluginsDir string, store *state.Store, reg registry.Client, newAdapter func(info runtime.InstanceInfo) runtime.Adapter) *Manager {
@@ -93,6 +102,7 @@ func (m *Manager) Bootstrap() error {
 			fsm:         fsm,
 			binPath:     d.BinaryPath,
 			programArgs: d.Manifest.Args,
+			env:         m.PluginEnv[d.Manifest.Name],
 		}
 	}
 
@@ -228,14 +238,37 @@ func (m *Manager) Install(ctx context.Context, name, versionConstraint string) e
 		return fmt.Errorf("manager: fetch %q: %w", name, err)
 	}
 
-	binPath, err := m.registry.Fetch(ctx, artifact, dir)
+	removeStateStaging(m.pluginsDir, name)
+	staging, err := os.MkdirTemp(m.pluginsDir, stagingPrefix+name+"-")
 	if err != nil {
-		return fmt.Errorf("manager: fetch %q: %w", name, err)
+		return fmt.Errorf("manager: install %q: %w", name, err)
 	}
 
-	if err := m.verifyChecksum(binPath, artifact.SHA256); err != nil {
-		_ = os.RemoveAll(dir)
+	defer os.RemoveAll(staging)
+
+	stagedBin, err := m.registry.Fetch(ctx, artifact, staging)
+	if err != nil {
+		return fmt.Errorf("manager: fetch %sq: %w", name, err)
+	}
+
+	/*binPath, err := m.registry.Fetch(ctx, artifact, dir)
+	if err != nil {
+		return fmt.Errorf("manager: fetch %q: %w", name, err)
+	}*/
+
+	if err := m.verifyChecksum(stagedBin, artifact.SHA256); err != nil {
+		// _ = os.RemoveAll(dir)
 		return fmt.Errorf("manager: install %q: %w", name, err)
+	}
+
+	dir = filepath.Join(m.pluginsDir, name)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("manager: install %q: %w", name, err)
+	}
+
+	binPath := filepath.Join(dir, filepath.Base(stagedBin))
+	if err := os.Rename(stagedBin, binPath); err != nil {
+		return fmt.Errorf("manager: install %q: move binary: %w", name, err)
 	}
 
 	manifest := discovery.Manifest{
@@ -254,8 +287,8 @@ func (m *Manager) Install(ctx context.Context, name, versionConstraint string) e
 	if err != nil {
 		return fmt.Errorf("manager: install %q: %w", name, err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "plugin.json"), data, 0o644); err != nil {
-		return fmt.Errorf("manager: install %q: %w", name, err)
+	if err := writeFileAtomic(filepath.Join(dir, "plugin.json"), data, 0o644); err != nil {
+		return fmt.Errorf("manager: install %q: write manifest: %w", name, err)
 	}
 
 	fsm := lifecycle.NewFSM()
@@ -263,7 +296,7 @@ func (m *Manager) Install(ctx context.Context, name, versionConstraint string) e
 	_ = fsm.Transition(lifecycle.StateDisabled)
 
 	m.mu.Lock()
-	m.instances[name] = &instance{fsm: fsm, binPath: binPath, programArgs: []string{"start"}}
+	m.instances[name] = &instance{fsm: fsm, binPath: binPath, env: m.PluginEnv[name], programArgs: defaultProgramArgs}
 	m.mu.Unlock()
 
 	return m.persistRecord(name, artifact.Version, false)
@@ -347,7 +380,7 @@ func (m *Manager) Disable(ctx context.Context, name string) error {
 // Capabilities confirmed the plugin declares it. The caller is expected to have checked capabilities
 // first; Dispense itself doesn't fail just because the plugin didn't register that key, the real RPC
 // call on the returned client will, with 	 gRPC "Unimplemented" error.
-func (m *Manager) Dispense(name, key string) (any, error) {
+func (m *Manager) Dispense(name, key, requiredCapability string) (any, error) {
 	m.mu.Lock()
 	inst, ok := m.instances[name]
 	m.mu.Unlock()
@@ -357,9 +390,20 @@ func (m *Manager) Dispense(name, key string) (any, error) {
 
 	m.mu.Lock()
 	adapter := inst.adapter
+	fsmState := inst.fsm.Current()
+	caps := inst.info.Capabilities
 	m.mu.Unlock()
+
+	if fsmState != lifecycle.StateReady {
+		return nil, fmt.Errorf("manager: %q is not READY (state=%s)", name, fsmState)
+	}
+
 	if adapter == nil {
 		return nil, fmt.Errorf("manager: %q is not started", name)
+	}
+
+	if requiredCapability != "" && !hasCapability(caps, requiredCapability) {
+		return nil, fmt.Errorf("manager: %q does not declare capability %q(has %v)", name, requiredCapability, caps)
 	}
 
 	d, ok := adapter.(runtime.Dispenser)
@@ -383,6 +427,10 @@ func (m *Manager) persistRecord(name, version string, enabled bool) error {
 	}
 	records[name] = state.PluginRecord{Name: name, Version: version, Enabled: enabled}
 	return m.store.Save(records)
+}
+
+func hasCapability(capa []string, want string) bool {
+	return slices.Contains(capa, want)
 }
 
 func (m *Manager) setEnabled(name string, enabled bool) error {
@@ -416,6 +464,29 @@ func (m *Manager) verifyChecksum(path, expected string) error {
 		return fmt.Errorf("checksum mismatch: got %s, want %s", got, expected)
 	}
 	return nil
+}
+
+// writeFileAtomic writes via a temp file in the same directory and renames
+// it into place, so a reader never sees a half-written file.
+func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, perm); err != nil {
+		return err
+	}
+
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+
+	return nil
+}
+
+func removeStateStaging(pluginDir, name string) {
+	stale, _ := filepath.Glob(filepath.Join(pluginDir, stagingPrefix+name+"-*"))
+	for _, d := range stale {
+		_ = os.RemoveAll(d)
+	}
 }
 
 type Status struct {
