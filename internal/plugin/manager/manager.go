@@ -31,8 +31,14 @@ var defaultRestartBackoff = []time.Duration{
 	16 * time.Second,
 }
 
-// instance bundles everything the Manager tracks for one plugin, running or not
+var defaultProgramArgs = []string{"start"}
 
+// stagingPrefix marks scratch directories inside the plugins directory.
+// Discovery skips every dot-prefixed directory, so a staging directory
+// left behind by a crash is never mistaken for a plugin.
+const stagingPrefix = ".staging-"
+
+// instance bundles everything the Manager tracks for one plugin, running or not
 type instance struct {
 	fsm           *lifecycle.FSM
 	adapter       runtime.Adapter
@@ -97,6 +103,7 @@ func (m *Manager) Bootstrap() error {
 			binPath:     d.BinaryPath,
 			programArgs: d.Manifest.Args,
 			env:         m.PluginEnv[d.Manifest.Name],
+			programArgs: defaultProgramArgs
 		}
 	}
 
@@ -232,20 +239,43 @@ func (m *Manager) Install(ctx context.Context, name, versionConstraint string) e
 		return fmt.Errorf("manager: fetch %q: %w", name, err)
 	}
 
-	binPath, err := m.registry.Fetch(ctx, artifact, dir)
+	removeStateStaging(m.pluginDir, name)
+	staging, err := os.MkdirTemp(m.pluginDir, stagingPrefix+name+"-")
 	if err != nil {
-		return fmt.Errorf("manager: fetch %q: %w", name, err)
+		return fmt.Errorf("manager: install %q: %w", name, err)
 	}
 
-	if err := m.verifyChecksum(binPath, artifact.SHA256); err != nil {
-		_ = os.RemoveAll(dir)
+	defer os.RemoveAll(staging)
+
+	stagdBin, err := m.registry.Fetch(ctx, artifact, staging)
+	if err != nil {
+		return fmt.Errorf("manager: fetch %sq: %w", name, err)
+	}
+
+	/*binPath, err := m.registry.Fetch(ctx, artifact, dir)
+	if err != nil {
+		return fmt.Errorf("manager: fetch %q: %w", name, err)
+	}*/
+
+	if err := m.verifyChecksum(stagdBin, artifact.SHA256); err != nil {
+		// _ = os.RemoveAll(dir)
 		return fmt.Errorf("manager: install %q: %w", name, err)
+	}
+
+	dir := filepath.Join(m.pluginsDir, name)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("manager: install %q: %w", name, err)
+	}
+
+	binPath := filepath.Join(dir, filepath.Base(stagedBin))
+	if err := os.Rename(stagedBin, binPath); err != nil {
+		return fmt.Errorf("manager: install %q: move binary: %w", name, err)
 	}
 
 	manifest := discovery.Manifest{
 		Name:            artifact.Name,
 		Version:         artifact.Version,
-		Type:            "vcs",
+		Type:            artifact.Type,
 		ProtocolVersion: artifact.ProtocolVersion,
 		Binary:          filepath.Base(binPath),
 		SHA256:          artifact.SHA256,
@@ -258,8 +288,8 @@ func (m *Manager) Install(ctx context.Context, name, versionConstraint string) e
 	if err != nil {
 		return fmt.Errorf("manager: install %q: %w", name, err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "plugin.json"), data, 0o644); err != nil {
-		return fmt.Errorf("manager: install %q: %w", name, err)
+	if err := writeFileAtomic(filepath.Join(dir, "plugin.json"), data, 0o644); err != nil {
+		return fmt.Errorf("manager: install %q: write manifest: %w", name, err)
 	}
 
 	fsm := lifecycle.NewFSM()
@@ -267,7 +297,7 @@ func (m *Manager) Install(ctx context.Context, name, versionConstraint string) e
 	_ = fsm.Transition(lifecycle.StateDisabled)
 
 	m.mu.Lock()
-	m.instances[name] = &instance{fsm: fsm, binPath: binPath, env: m.PluginEnv[name], programArgs: []string{"start"}}
+	m.instances[name] = &instance{fsm: fsm, binPath: binPath, env: m.PluginEnv[name], programArgs: defaultProgramArgs}
 	m.mu.Unlock()
 
 	return m.persistRecord(name, artifact.Version, false)
@@ -435,6 +465,27 @@ func (m *Manager) verifyChecksum(path, expected string) error {
 		return fmt.Errorf("checksum mismatch: got %s, want %s", got, expected)
 	}
 	return nil
+}
+
+// writeFileAtomic writes via a temp file in the same directory and renames
+// it into place, so a reader never sees a half-written file.
+func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, perm); err != nil {
+		return err
+	}
+
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+}
+
+func removeStateStaging(pluginDir, name string string) {
+	stale, _ := filepath.Glob(filepath.Join(pluginDir, stagingPrefix+name+"-*"))
+	for _, d:= range stale {
+		_ = os.RemoveAll(d)
+	}
 }
 
 type Status struct {

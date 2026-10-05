@@ -58,11 +58,19 @@ type LoggingCnf struct {
 	Format string `json:"format" yaml:"format" mapstructure:"format"`
 }
 
+type PluginsTelemetryCnf struct {
+	Port 		int 	`json:"port" yaml:"port" mapstructure:"port"`
+	Liveness 	string 	`json:"liveness" yaml:"liveness" mapstructure:"liveness"`
+	Readiness 	string 	`json:"readiness" yaml:"readiness" mapstructure:"readiness"`
+	LogLevel 	string 	`json:"log_level" yaml:"log_level" mapstructure:"log_level"`
+}
+
 type PluginsCnf struct {
 	Dir               string                  `json:"dir" yaml:"dir" mapstructure:"dir"`
 	StateFile         string                  `json:"state_file" yaml:"state_file" mapstructure:"state_file"`
 	LocalRegistryFile string                  `json:"local_registry_file" yaml:"local_registry_file" mapstructure:"local_registry_file"`
 	RemoteRegistry    PluginRemoteRegistryCnf `json:"remote_registry" yaml:"remote_registry" mapstructure:"remote_registry"`
+	telemetry 		  PluginsTelemetryCnf	  `json:"telemetry" yaml:"telemetry" mapstructure:"telemetry"`
 }
 type PluginRemoteRegistryCnf struct {
 	Enabled     bool   `json:"enabled" yaml:"enabled" mapstructure:"enabled"`
