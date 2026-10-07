@@ -63,7 +63,11 @@ func (r *LocalRegistry) Resolve(ctx context.Context, name, versionConstraint str
 		return ArtifactRef{}, fmt.Errorf("local-registry: %s@%s: fetch checksums: %w", name, versionConstraint, err)
 	}
 
-	sum, err := extractChecksums(checksums, fmt.Sprintf("%s_%s_%s", asset.Name, goos, goarch))
+	archName := goarch
+	if goarch == "amd64" {
+		archName = "x86_64"
+	}
+	sum, err := extractChecksums(checksums, fmt.Sprintf("%s_%s_%s", asset.Name, goos, archName))
 	if err != nil {
 		return ArtifactRef{}, fmt.Errorf("local-registry: %s@%s: %w", name, versionConstraint, err)
 	}
