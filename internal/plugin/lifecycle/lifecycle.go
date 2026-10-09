@@ -1,10 +1,15 @@
 package lifecycle
 
-import "slices"
+import (
+	"errors"
+	"slices"
+)
 
 import "fmt"
 
 type State string
+
+var ErrIllegalTransition = errors.New("illegal transition")
 
 const (
 	StateNotInstalled State = "NOT_INSTALLED"
@@ -64,5 +69,5 @@ func (f *FSM) Transition(next State) error {
 		return nil
 	}
 
-	return fmt.Errorf("lifecycle: illegal transition %s -> %s", f.current, next)
+	return fmt.Errorf("lifecycle: %w illegal transition %s -> %s", ErrIllegalTransition, f.current, next)
 }

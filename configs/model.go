@@ -47,6 +47,7 @@ type VcsProviderCnf struct {
 	BaseUrl     string `json:"url" yaml:"url" mapstructure:"url"`
 	TokenEnvVar string `json:"token_env_var" yaml:"token_env_var" mapstructure:"token_env_var"`
 	Name        string `json:"name" yaml:"name" mapstructure:"name"`
+	Version     string `json:"version" yaml:"version" mapstructure:"version"`
 	BinaryName  string `json:"binary_name" yaml:"binary_name" mapstructure:"binary_name"`
 	Owner       string `json:"owner" yaml:"owner" mapstructure:"owner"`
 	Repo        string `json:"repo" yaml:"repo" mapstructure:"repo"`
@@ -59,10 +60,10 @@ type LoggingCnf struct {
 }
 
 type PluginsTelemetryCnf struct {
-	Port 		int 	`json:"port" yaml:"port" mapstructure:"port"`
-	Liveness 	string 	`json:"liveness" yaml:"liveness" mapstructure:"liveness"`
-	Readiness 	string 	`json:"readiness" yaml:"readiness" mapstructure:"readiness"`
-	LogLevel 	string 	`json:"log_level" yaml:"log_level" mapstructure:"log_level"`
+	Port      int    `json:"port" yaml:"port" mapstructure:"port"`
+	Liveness  string `json:"liveness" yaml:"liveness" mapstructure:"liveness"`
+	Readiness string `json:"readiness" yaml:"readiness" mapstructure:"readiness"`
+	LogLevel  string `json:"log_level" yaml:"log_level" mapstructure:"log_level"`
 }
 
 type PluginsCnf struct {
@@ -70,8 +71,9 @@ type PluginsCnf struct {
 	StateFile         string                  `json:"state_file" yaml:"state_file" mapstructure:"state_file"`
 	LocalRegistryFile string                  `json:"local_registry_file" yaml:"local_registry_file" mapstructure:"local_registry_file"`
 	RemoteRegistry    PluginRemoteRegistryCnf `json:"remote_registry" yaml:"remote_registry" mapstructure:"remote_registry"`
-	telemetry 		  PluginsTelemetryCnf	  `json:"telemetry" yaml:"telemetry" mapstructure:"telemetry"`
+	Telemetry         PluginsTelemetryCnf     `json:"telemetry" yaml:"telemetry" mapstructure:"telemetry"`
 }
+
 type PluginRemoteRegistryCnf struct {
 	Enabled     bool   `json:"enabled" yaml:"enabled" mapstructure:"enabled"`
 	Type        string `json:"type" yaml:"type" mapstructure:"type"`
@@ -85,5 +87,5 @@ type PluginRemoteRegistryCnf struct {
 }
 
 type TelemetryCnf struct {
-	Enabled bool `json:"enabled"`
+	Enabled bool `json:"enabled" yaml:"enabled" mapstructure:"enabled"`
 }

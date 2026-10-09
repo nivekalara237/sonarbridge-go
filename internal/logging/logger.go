@@ -87,3 +87,7 @@ func SetOutput(w io.Writer) {
 	logger = slog.New(
 		slog.NewTextHandler(w, nil))
 }
+
+func GetLogger() *slog.Logger {
+	return logger
+}

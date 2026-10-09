@@ -93,7 +93,7 @@ func (p *Provisioner) Orphans(desired []Desired) []string {
 
 func (p *Provisioner) provision(ctx context.Context, d Desired) Result {
 	res := Result{Name: d.Name, Version: d.Version}
-	log := p.Log.With("plugin", d.Name, "Version", d.Version)
+	log := p.log().With("plugin", d.Name, "Version", d.Version)
 
 	if reason := p.installReason(d); reason != "" {
 		log.Info("installing plugin", "reason", reason)

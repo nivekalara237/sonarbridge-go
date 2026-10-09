@@ -183,6 +183,12 @@ func SetDefaults() {
 	Vconfig.SetDefault("plugins.remote_registry.url", "http://localhost:8077")
 	Vconfig.SetDefault("logging.level", "info")
 	Vconfig.SetDefault("logging.format", "json")
+
+	// Plugins telemetry
+	Vconfig.SetDefault("plugins.telemetry.port", "5189")
+	Vconfig.SetDefault("plugins.telemetry.liveness", "/livez")
+	Vconfig.SetDefault("plugins.telemetry.readiness", "/readyz")
+
 }
 
 func ApplyServeFlags(flags *pflag.FlagSet) error {
