@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -19,6 +20,10 @@ import (
 	"sync"
 	"time"
 )
+
+// ErrUnknownPlugin is wrapped by every Manager method that takes a plugin
+// name when no such plugin is known. Match it with errors.Is.
+var ErrUnknownPlugin = errors.New("unknown plugin")
 
 // defaultRestartBackoff is the bounded exponential backoff applied
 // between automatic restarts after a crash, per the decision "bounded backoff exponential"
@@ -54,6 +59,7 @@ type Manager struct {
 	mu         sync.Mutex
 	pluginsDir string
 	store      *state.Store
+	storeMu    sync.Mutex
 	registry   registry.Client
 
 	newAdapter func(info runtime.InstanceInfo) runtime.Adapter
@@ -375,6 +381,28 @@ func (m *Manager) Disable(ctx context.Context, name string) error {
 	return m.setEnabled(name, false)
 }
 
+// Restart stops the plugin if it is running, then starts it again. From STOPPED, FAILED, CRASHED and ENABLED
+// there is nothing to stop, and it is a plain Start; from any other state (DISABLED, a start or stop already
+// in flight...) the FSM refuses the transition and the error wraps lifecycle.ErrIllegalTransition. If the stop
+// succeeds but the new start fails, the plugin is left FAILED — the state tells the truth.
+
+func (m *Manager) Restart(ctx context.Context, name string) error {
+	m.mu.Lock()
+	inst, ok := m.instances[name]
+	running := ok && inst.fsm.Current() == lifecycle.StateReady
+	m.mu.Unlock()
+	if !ok {
+		return fmt.Errorf("manager: %w %q", ErrUnknownPlugin, name)
+	}
+
+	if running {
+		if err := m.Stop(ctx, name); err != nil {
+			return err
+		}
+	}
+	return m.Start(ctx, name)
+}
+
 // Dispense returns the client-side stub for a business service (see plugin.*Key constants in cli-bridge-plugin-sdk)
 // on an already READY plugin. Ex: CommentAndNoteService once Handshake's
 // Capabilities confirmed the plugin declares it. The caller is expected to have checked capabilities
@@ -421,11 +449,21 @@ func (m *Manager) transition(inst *instance, next lifecycle.State) error {
 }
 
 func (m *Manager) persistRecord(name, version string, enabled bool) error {
+	return m.updateRecords(func(records map[string]state.PluginRecord) {
+		records[name] = state.PluginRecord{Name: name, Version: version, Enabled: enabled}
+	})
+}
+
+func (m *Manager) updateRecords(change func(map[string]state.PluginRecord)) error {
+	m.storeMu.Lock()
+	defer m.storeMu.Unlock()
+
 	records, err := m.store.Load()
 	if err != nil {
 		return err
 	}
-	records[name] = state.PluginRecord{Name: name, Version: version, Enabled: enabled}
+
+	change(records)
 	return m.store.Save(records)
 }
 
@@ -434,17 +472,14 @@ func hasCapability(capa []string, want string) bool {
 }
 
 func (m *Manager) setEnabled(name string, enabled bool) error {
-	records, err := m.store.Load()
-	if err != nil {
-		return err
-	}
-	rec, ok := records[name]
-	if !ok {
-		rec = state.PluginRecord{Name: name}
-	}
-	rec.Enabled = enabled
-	records[name] = rec
-	return m.store.Save(records)
+	return m.updateRecords(func(records map[string]state.PluginRecord) {
+		rec, ok := records[name]
+		if !ok {
+			rec = state.PluginRecord{Name: name}
+		}
+		rec.Enabled = enabled
+		records[name] = rec
+	})
 }
 
 func (m *Manager) verifyChecksum(path, expected string) error {

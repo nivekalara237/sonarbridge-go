@@ -10,10 +10,13 @@ LDFLAGS := -s -w -X '$(PKG_VERSION).Version=$(VERSION)' \
            -X '$(PKG_VERSION).Commit=$(COMMIT)' \
            -X '$(PKG_VERSION).Date=$(DATE)'
 
-.PHONY: run cli test tidy build-server build-server-prod build-ci build-clid-prod gor-gitlab-plugin
+.PHONY: run cli test tidy build-server build-server-prod build-ci build-clid-prod gor-gitlab-plugin gor-github-plugin
 
 gor-gitlab-plugin:
 	goreleaser release --clean --skip=validate,publish --config ./plugins/vcs/gitlab/.gor-config.yaml
+
+gor-github-plugin:
+	goreleaser release --clean --skip=validate,publish --config ./plugins/vcs/github/.gor-config.yaml
 
 run:
 	go run ./cmd/server

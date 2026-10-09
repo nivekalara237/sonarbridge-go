@@ -30,7 +30,7 @@ func NewApp() *App {
 
 	return &App{
 		Service: svc,
-		// Logger:  logging.NewNoop(config),
+		Logger:  logging.GetLogger(),
 	}
 }
 

@@ -15,6 +15,8 @@ func NewRouter(
 	webhook *WebhookHandler,
 	report *ReportHandler,
 	vcsHandler *PullrequestCommentHandler,
+	pluginCtrl *PluginController,
+	pluginLifecycleCtrler *PluginLifecycleController,
 ) *http.Handler {
 	mux := http.NewServeMux()
 
@@ -27,6 +29,10 @@ func NewRouter(
 	mux.Handle("POST /vcs/pullrequest/createnote", httpx.Handlerx(vcsHandler.CreateCommentOrNote))
 	mux.Handle("PUT /vcs/pullrequest/updatenote", httpx.Handlerx(vcsHandler.UpdateCommentOrNote))
 	mux.Handle("PATCH /vcs/pullrequest/updatenote", httpx.Handlerx(vcsHandler.UpdateCommentOrNote))
+
+	mux.Handle("GET /vcs/plugins/availables", httpx.Handlerx(pluginCtrl.GetAvailablePlugins))
+	mux.Handle("GET /vcs/plugins/installed", httpx.Handlerx(pluginCtrl.GetInstalledPlugins))
+	pluginLifecycleCtrler.SelfRegister(mux)
 
 	return mdlw.NewBuilder(mux).
 		Add(func(handler http.Handler) http.Handler {

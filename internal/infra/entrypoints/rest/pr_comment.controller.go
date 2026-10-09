@@ -1,7 +1,6 @@
 package rest
 
 import (
-	"fmt"
 	"net/http"
 	"sonarbridge-go/internal/core/domain"
 	"sonarbridge-go/internal/core/interactor"
@@ -38,7 +37,6 @@ func (p *PullrequestCommentHandler) CreateCommentOrNote(
 
 	createCommentValidation := validation.NewValidator[dto.VcsCreateCommentRequestDTO](createCommentRequest, "create_comment", nil)
 	if err := createCommentValidation.IsValidOrThrow(); err != nil {
-		fmt.Println(createCommentValidation)
 		return httpx.ErrBadRequest.Wrap(err)
 	}
 

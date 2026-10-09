@@ -24,28 +24,6 @@ import (
 
 var logger hclog.Logger
 
-/*
-	type infoServer struct {
-		pluginv1.UnimplementedPluginInfoServer
-	}
-
-	func (s *infoServer) GetInfo(ctx context.Context, req *pluginv1.GetInfoRequest) (*pluginv1.InfoResponse, error) {
-		return &pluginv1.InfoResponse{
-			Name:            build.Name,
-			Version:         build.Version,
-			PluginType:      "vcs",
-			ProtocolVersion: build.ProtocolVersion,
-			Capabilities: []string{
-				capability.PullRequestCreateComment,
-				capability.PullRequestDeleteComment,
-				capability.PullRequestUpdateComment,
-				capability.Issue,
-				capability.Webhook,
-				capability.Artifact,
-			},
-		}, nil
-	}
-*/
 var rootCommand = &cobra.Command{
 	Use:           "gitlab-vcs [-c config.yaml] start",
 	SilenceUsage:  true,

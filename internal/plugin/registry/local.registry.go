@@ -2,6 +2,7 @@ package registry
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,18 +17,38 @@ import (
 )
 
 type LocalRegistry struct {
-	client *httpclient.Client
+	client     *httpclient.Client
+	clientOpts []httpclient.Option
 }
 
 type localAsset struct {
 }
 
-func NewLocalRegistry(baseUrl string) *LocalRegistry {
-	return &LocalRegistry{client: httpclient.NewClientHttp(
+type LocalRegistryOption func(*LocalRegistry)
+
+func WithBasicAuth(username, password string) LocalRegistryOption {
+	return func(registry *LocalRegistry) {
+		encoded := base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", username, password)))
+		registry.clientOpts = append(registry.clientOpts, httpclient.WithDefaultHeader("Authorization", "Basic "+encoded))
+	}
+}
+
+func NewLocalRegistry(baseUrl string, opts ...LocalRegistryOption) *LocalRegistry {
+	clientOpts := []httpclient.Option{
 		httpclient.WithBaseURL(baseUrl),
 		httpclient.WithCache(httpclient.NewInMemoryCache()),
-		httpclient.WithTimeout(5*time.Second),
-	)}
+		httpclient.WithTimeout(5 * time.Second),
+	}
+	reg := &LocalRegistry{}
+	if len(opts) > 0 {
+		for _, opt := range opts {
+			opt(reg)
+		}
+	}
+	clientOpts = append(clientOpts, reg.clientOpts...)
+	reg.client = httpclient.NewClientHttp(clientOpts...)
+	// debug.PrintLn(baseUrl, len(opts), clientOpts, len(clientOpts))
+	return reg
 }
 
 func (r *LocalRegistry) httpClient() *httpclient.Client {
@@ -57,8 +78,8 @@ func (r *LocalRegistry) Resolve(ctx context.Context, name, versionConstraint str
 	if checksumAsset == nil {
 		return ArtifactRef{}, fmt.Errorf("local-registry: %s@%s: release %s has no checksums.txt asset", name, versionConstraint, catalog.Metadata.Name)
 	}
-
-	checksums, err := r.downloadBytes(ctx, "assets/binary/"+utils.EncodeURIComponent(checksumAsset.Path))
+	// vcsType := getVcsTypeByName(name)
+	checksums, err := r.downloadBytes(ctx, fmt.Sprintf("assets/binary/%s", utils.EncodeURIComponent(checksumAsset.Path)))
 	if err != nil {
 		return ArtifactRef{}, fmt.Errorf("local-registry: %s@%s: fetch checksums: %w", name, versionConstraint, err)
 	}
@@ -68,7 +89,7 @@ func (r *LocalRegistry) Resolve(ctx context.Context, name, versionConstraint str
 		return ArtifactRef{}, fmt.Errorf("local-registry: %s@%s: %w", name, versionConstraint, err)
 	}
 
-	metaBytes, err := r.downloadBytes(ctx, "assets/binary/"+utils.EncodeURIComponent(catalog.Metadata.Path))
+	metaBytes, err := r.downloadBytes(ctx, fmt.Sprintf("assets/binary/%s", utils.EncodeURIComponent(catalog.Metadata.Path)))
 	if err != nil {
 		return ArtifactRef{}, fmt.Errorf("local-registry: %s@%s: fetch metadata: %w", name, versionConstraint, err)
 	}
@@ -158,15 +179,17 @@ func findAsset(entries []Entry, name, os, arch string, isChecksum bool) *Entry {
 }
 
 func (r *LocalRegistry) fetchCatalogRelease(ctx context.Context, name, versionConstraint string) (*Catalog, error) {
+	vcsType := getVcsTypeByName(name)
 	var url string
+
 	if versionConstraint == "" || versionConstraint == "latest" {
-		url = fmt.Sprintf("/artifacts/latest")
+		url = fmt.Sprintf("/%s/artifacts/latest", vcsType)
 	} else {
 		tag := versionConstraint
 		if !strings.HasPrefix(tag, "v") {
 			tag = "v" + tag
 		}
-		url = fmt.Sprintf("/artifacts/%s", tag)
+		url = fmt.Sprintf("/%s/artifacts/%s", vcsType, tag)
 	}
 
 	resp, err := r.client.Get(ctx, url, nil)
@@ -204,6 +227,21 @@ func (r *LocalRegistry) fetchCatalogRelease(ctx context.Context, name, versionCo
 	}
 
 	return &catalog, nil
+}
+
+func getVcsTypeByName(name string) string {
+	var vcsType string
+	switch {
+	case strings.Contains(strings.ToLower(name), "gitlab"):
+		vcsType = "gitlab"
+	case strings.Contains(strings.ToLower(name), "github"):
+		vcsType = "github"
+	case strings.Contains(strings.ToLower(name), "bb"):
+		vcsType = "bitbucket"
+	default:
+		vcsType = "gitlab"
+	}
+	return vcsType
 }
 
 func (r *LocalRegistry) downloadBytes(ctx context.Context, url string) ([]byte, error) {

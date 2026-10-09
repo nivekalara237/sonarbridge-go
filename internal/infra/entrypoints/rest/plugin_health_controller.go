@@ -13,12 +13,12 @@ const (
 	stateNotInstalled = "NOT_INSTALLED"
 )
 
-type Phealth struct {
+type PHealth struct {
 	mgr       *manager.Manager
 	providers []provision.Desired
 }
 
-func (h *Phealth) states() map[string]string {
+func (h *PHealth) states() map[string]string {
 	live := make(map[string]string)
 	for _, s := range h.mgr.List() {
 		live[s.Name] = string(s.State)
@@ -37,13 +37,12 @@ func (h *Phealth) states() map[string]string {
 	return out
 }
 
-func (h *Phealth) PluginLive(w http.ResponseWriter, _ *http.Request) error {
+func (h *PHealth) PluginLive(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{"status": "OK"})
-	return nil
 }
 
-func (h *Phealth) PluginReady(w http.ResponseWriter, _ *http.Request) error {
+func (h *PHealth) PluginReady(w http.ResponseWriter, _ *http.Request) {
 	states := h.states()
 	ready := true
 	for _, s := range states {
@@ -59,9 +58,8 @@ func (h *Phealth) PluginReady(w http.ResponseWriter, _ *http.Request) error {
 
 	w.Header().Set("Cache-Control", "no-store")
 	httpx.WriteJSON(w, code, map[string]any{"ready": ready, "providers": states})
-	return nil
 }
 
-func NewPluginHealthHandler(m *manager.Manager, ds []provision.Desired) *Phealth {
-	return &Phealth{mgr: m, providers: ds}
+func NewPluginHealthCheckHandler(m *manager.Manager, ds []provision.Desired) *PHealth {
+	return &PHealth{mgr: m, providers: ds}
 }

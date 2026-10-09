@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sonarbridge-go/configs"
+	"sonarbridge-go/internal/infra/utils"
 	"sonarbridge-go/internal/plugin/manager"
+	"sonarbridge-go/internal/plugin/provision"
 	"sonarbridge-go/internal/plugin/registry"
 	"sonarbridge-go/internal/plugin/runtime"
 	"sonarbridge-go/internal/plugin/state"
@@ -15,8 +18,8 @@ import (
 )
 
 func (a *App) initPluginManager() error {
-	fmt.Println("Plugin manager", ":", "Initialization", configs.AppConfig.Plugins.Dir)
 	rootDir := os.ExpandEnv(configs.AppConfig.Plugins.Dir)
+	fmt.Println("Plugin manager", ":", "Initialization", rootDir)
 	if err := os.MkdirAll(rootDir, 0o755); err != nil {
 		return fmt.Errorf("unable to create Plugin directory: %w", err)
 	}
@@ -28,7 +31,7 @@ func (a *App) initPluginManager() error {
 
 	registryClient := getRegistryClient()
 	if registryClient == nil {
-		return fmt.Errorf("unable to create registry client")
+		return fmt.Errorf("remote-registry is enabled but, unable to create registry client")
 	}
 
 	newStore := state.NewStore(resolvePath(rootDir, os.ExpandEnv(configs.AppConfig.Plugins.StateFile)))
@@ -38,64 +41,101 @@ func (a *App) initPluginManager() error {
 	})
 	a.PluginManager = m
 
-	fmt.Println(`Manager.Install vcs plugin - Resolve + Fetch + real checksum verification`)
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-
 	if err := m.Bootstrap(); err != nil {
 		return fmt.Errorf("boostrap: %w", err)
 	}
 
-	for _, provider := range vcsProviders {
-		pEnvMap := make(map[string]map[string]string)
-		if provider.Name == "gitlab" {
-			pEnvMap[provider.BinaryName] = map[string]string{
-				"GITLAB_TOKEN":    provider.TokenEnvVar,
-				"GITLAB_BASE_URL": provider.BaseUrl,
-			}
-		}
-		if provider.Name == "github" {
-			pEnvMap[provider.BinaryName] = map[string]string{
-				"GITHUB_TOKEN":    provider.TokenEnvVar,
-				"GITHUB_BASE_URL": provider.BaseUrl,
-			}
+	return nil
+}
+
+func loadPluginEnvByVcs(vcs []configs.VcsProviderCnf) map[string]map[string]string {
+	pEnvMap := make(map[string]map[string]string)
+	for _, provider := range vcs {
+		pEnvMap[provider.BinaryName] = map[string]string{
+			fmt.Sprintf("%s_TOKEN", strings.ToUpper(provider.Name)):    provider.TokenEnvVar,
+			fmt.Sprintf("%s_BASE_URL", strings.ToUpper(provider.Name)): provider.BaseUrl,
+			fmt.Sprintf("%s_VERSION", strings.ToUpper(provider.Name)):  provider.Version,
+			fmt.Sprintf("%s_CA_FILE", strings.ToUpper(provider.Name)):  provider.CacertFile,
 		}
 
-		m.PluginEnv = pEnvMap
-
-		// fmt.Println(stringify.ToString(provider))
-		if err := m.Install(ctx, strings.ToLower(strings.TrimSpace(provider.BinaryName)), "latest"); err != nil {
-			return fmt.Errorf("install: %s Plugin: %w", provider.Name, err)
+		if slices.Contains([]string{"github", "gitea"}, strings.ToLower(provider.Name)) {
+			pEnvMap[provider.BinaryName][fmt.Sprintf("%s_OWNER", strings.ToUpper(provider.Name))] = provider.Owner
+			pEnvMap[provider.BinaryName][fmt.Sprintf("%s_REPO", strings.ToUpper(provider.Name))] = provider.Repo
 		}
+	}
+	return pEnvMap
+}
 
-		fmt.Println("enabling from boostrap (discovery what have been installed)")
-		if err := m.Enable(provider.BinaryName); err != nil {
-			return fmt.Errorf("enable: %w", err)
+func (a *App) RunPluginProvisioner(provisioned chan struct{}, pCtx context.Context) error {
+	cnf := configs.AppConfig
+	rootDir := os.ExpandEnv(configs.AppConfig.Plugins.Dir)
+
+	if a.PluginManager == nil {
+		if err := a.initPluginManager(); err != nil {
+			a.Logger.Error("plugin provisioner", "error", err)
+			return err
 		}
-
-		fmt.Println("Start binary")
-
-		if err := m.Start(context.Background(), provider.BinaryName); err != nil {
-			return fmt.Errorf("start: %w", err)
-		}
-
-		fmt.Printf("%s is started at %s", provider.Name, time.Now())
 	}
 
-	fmt.Println()
-
-	for _, s := range m.List() {
-		fmt.Printf("%s [%s] capabilities=%v\n\n", s.Name, s.State, s.Info.Capabilities)
+	a.PluginManager.PluginEnv = make(map[string]map[string]string, len(cnf.VcsProviders))
+	toProvision := make([]provision.Desired, 0, len(cnf.VcsProviders))
+	mapEnvs := loadPluginEnvByVcs(cnf.VcsProviders)
+	for _, p := range cnf.VcsProviders {
+		env := mapEnvs[p.BinaryName]
+		toProvision = append(toProvision, provision.Desired{
+			Name:    p.BinaryName,
+			Version: utils.Ternary[string](p.Version == "", "latest", p.Version),
+		})
+		a.PluginManager.PluginEnv[p.BinaryName] = env
 	}
+
+	go func() {
+		defer close(provisioned)
+
+		prov := &provision.Provisioner{
+			PluginDir:      rootDir,
+			Manager:        a.PluginManager,
+			InstallTimeout: 5 * time.Second,
+			Log:            a.Logger,
+		}
+
+		if orphans := prov.Orphans(toProvision); len(orphans) > 0 {
+			a.Logger.Warn("plugins installed but absent from the configuration are left untouched", "plugins", orphans)
+		}
+
+		failed := 0
+		for _, r := range prov.Run(pCtx, toProvision) {
+			if r.Err != nil {
+				failed++
+			}
+		}
+
+		if failed > 0 || len(toProvision) < len(cnf.VcsProviders) {
+			a.Logger.Warn("server is degraded: /readyz stays false until every configured provider is READY", "configured", len(cnf.VcsProviders), "failed", failed+len(cnf.VcsProviders)-len(toProvision))
+		} else {
+			a.Logger.Info("plugins provisioned", "count", len(toProvision))
+		}
+	}()
 
 	return nil
 }
 
 func getRegistryClient() registry.Client {
 	if configs.AppConfig.Plugins.RemoteRegistry.Enabled {
+		var opts []registry.LocalRegistryOption
+		if configs.AppConfig.Plugins.RemoteRegistry.Username != "" ||
+			configs.AppConfig.Plugins.RemoteRegistry.Password != "" {
+			opts = append(opts, registry.WithBasicAuth(
+				configs.AppConfig.Plugins.RemoteRegistry.Username,
+				configs.AppConfig.Plugins.RemoteRegistry.Password,
+			),
+			)
+		}
 		if configs.AppConfig.Plugins.RemoteRegistry.Type == "http" {
-			//TODO: complete by adding username and password
-			return registry.NewLocalRegistry(configs.AppConfig.Plugins.RemoteRegistry.Url)
+			return registry.NewLocalRegistry(
+				configs.AppConfig.Plugins.RemoteRegistry.Url,
+				utils.Ternary(len(opts) > 0, opts, []registry.LocalRegistryOption{})...,
+			)
 		}
 
 		if configs.AppConfig.Plugins.RemoteRegistry.Type == "github" {
@@ -107,6 +147,8 @@ func getRegistryClient() registry.Client {
 				),
 			}
 		}
+	} else {
+		return registry.NewDisableRegistry()
 	}
 
 	return nil

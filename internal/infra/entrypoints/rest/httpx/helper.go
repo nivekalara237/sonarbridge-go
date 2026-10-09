@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"sonarbridge-go/internal/infra/entrypoints/rest/validation"
 	"sonarbridge-go/internal/logging"
+	"strings"
 )
 
 func WriteJSON(w http.ResponseWriter, status int, v any) {
@@ -55,4 +56,14 @@ func GetRequestBody[T any](r *http.Request, bodyOutput *T) error {
 		return err
 	}
 	return nil
+}
+
+func RequireMethod(w http.ResponseWriter, req *http.Request, expectedMethod string) bool {
+	if strings.ToUpper(strings.TrimSpace(expectedMethod)) == req.Method {
+		return true
+	}
+
+	w.Header().Set("Allow", strings.ToUpper(expectedMethod))
+	WriteError(w, req, ErrMethodNotAllowed)
+	return false
 }

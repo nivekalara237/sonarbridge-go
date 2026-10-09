@@ -65,15 +65,32 @@ func main() {
 		}
 		return releases
 	})
-	server.AddRoute("/artifacts", "GET", fnGetArtifacts)
-	server.AddRoute("/artifacts/{version}", "GET", fnGetArtifacts)
+	server.AddRoute("/{vcs}/artifacts", "GET", fnGetArtifacts)
+	server.AddRoute("/{vcs}/artifacts/{version}", "GET", fnGetArtifacts)
+	server.AddRoute("/artifacts/metadatas", "GET", fnGetArtifacts)
+	server.AddRoute("/artifacts/all", "GET", fnGetAllArtifacts)
 	server.Serve()
+}
+
+func fnGetAllArtifacts(vps ...string) any {
+	dir := fmt.Sprintf("%s/bin.local/assets", args.absAsset)
+
+	asset := &localregistry.Asset{}
+
+	found, err := asset.FindAssetContents(dir)
+	if err != nil {
+		panic(err)
+	}
+
+	return found
 }
 
 func fnGetArtifacts(pvs ...string) any {
 	var version string
+	var vcs string
 	if len(pvs) > 0 {
-		version = pvs[0]
+		vcs = pvs[0]
+		version = pvs[1]
 	}
 
 	artifacts := ""
@@ -82,7 +99,7 @@ func fnGetArtifacts(pvs ...string) any {
 	} else {
 		artifacts = version + "/artifacts.json"
 	}
-	file, _ := os.ReadFile(fmt.Sprintf("%s/bin.local/assets/binaries/gitlab/%s", args.absAsset, artifacts))
+	file, _ := os.ReadFile(fmt.Sprintf("%s/bin.local/assets/binaries/%s/%s", args.absAsset, vcs, artifacts))
 	var res any
 	if err := json.Unmarshal(file, &res); err != nil {
 		panic(err)

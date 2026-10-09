@@ -3,8 +3,10 @@ package local_registry
 import (
 	"context"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 )
@@ -25,11 +27,21 @@ func NewLocalRegistryServer(port int, addr, absoluteAssetPath string) *LocalRegi
 	}
 }
 
+func logMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		uri, _ := url.PathUnescape(r.RequestURI)
+		fmt.Printf("Request: method=%s, Uri=%s\n", r.Method, uri)
+		next.ServeHTTP(w, r)
+		log.Println("Request took : " + time.Since(start).String())
+	})
+}
+
 func (s *LocalRegistryServer) Serve() {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	server := http.Server{
-		Handler:           s.serverMux,
+		Handler:           logMiddleware(s.serverMux),
 		Addr:              net.JoinHostPort(s.address, strconv.Itoa(s.port)),
 		ReadHeaderTimeout: 5 * time.Second,
 		WriteTimeout:      20 * time.Second,
@@ -43,7 +55,8 @@ func (s *LocalRegistryServer) Serve() {
 	go func() {
 		err := server.ListenAndServe()
 		if err != nil {
-			fmt.Sprintln("Server Error: %w", err)
+			fmt.Printf("Server Error: %s", err)
+			fmt.Println()
 		}
 		defer cancel()
 	}()
@@ -52,7 +65,7 @@ func (s *LocalRegistryServer) Serve() {
 	fmt.Println("##          Local Registry Server               ##")
 	fmt.Println("##################################################")
 	fmt.Println("")
-	fmt.Printf("Listen      : %s:%d", s.address, s.port)
+	fmt.Printf("Listen      : http(s)://%s:%d", s.address, s.port)
 	fmt.Println()
 	fmt.Println("Start At    : " + time.Now().String())
 	fmt.Println("Assets Path : " + s.absoluteAssetPath)
