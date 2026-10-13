@@ -51,12 +51,14 @@ type TLSConfig struct {
 }
 
 type Client struct {
-	headers    http.Header
-	httpClient *http.Client
-	baseURL    *url.URL
-	retry      RetryConfig
-	cache      Cache
-	Tls        TLSConfig
+	headers        http.Header
+	httpClient     *http.Client
+	baseURL        *url.URL
+	retry          RetryConfig
+	cache          Cache
+	Tls            TLSConfig
+	allowSubdomain bool
+	hasTlsEnabled  bool
 }
 
 func NewClientHttp(opts ...Option) *Client {
@@ -84,6 +86,12 @@ func WithBaseURL(rawURL string) Option {
 			panic(err)
 		}
 		c.baseURL = u
+	}
+}
+
+func WithAllowSubdomain(allowed bool) Option {
+	return func(client *Client) {
+		client.allowSubdomain = allowed
 	}
 }
 
@@ -124,6 +132,7 @@ func WithTLSCACertFile(caCertFile string) Option {
 		}
 		tr.TLSClientConfig = &tls.Config{RootCAs: ca, MinVersion: tls.VersionTLS12}
 		c.httpClient.Transport = tr
+		c.hasTlsEnabled = true
 	}
 }
 
@@ -139,6 +148,7 @@ func WithTLSCAPemData(data string) Option {
 				MinVersion: tls.VersionTLS12,
 			},
 		}
+		c.hasTlsEnabled = true
 	}
 }
 
@@ -284,21 +294,67 @@ func encodeMultipart(data *MultipartData) (io.Reader, string, error) {
 	return &buf, writer.FormDataContentType(), nil
 }
 
+func hasHostname(userInput string) bool {
+	u, err := url.Parse(userInput)
+	if err != nil {
+		return false
+	}
+	return u.Scheme != "" && u.Host != ""
+}
 func (c *Client) buildURL(path string, opts *RequestOptions) (*url.URL, error) {
 	// Base
 	var u *url.URL
 	if c.baseURL != nil {
-		// u = c.baseURL.ResolveReference(&url.URL{Path: path})
 		base := *c.baseURL
-		if !strings.HasSuffix(base.Path, "/") {
-			base.Path += "/"
+		if hasHostname(path) {
+			full, err := url.Parse(path)
+			if err != nil {
+				return nil, err
+			}
+
+			hostname := strings.ToLower(full.Hostname())
+			baseHostname := strings.ToLower(base.Hostname())
+			allowed := hostname == baseHostname ||
+				(c.allowSubdomain && strings.HasSuffix(hostname, "."+baseHostname))
+
+			if !allowed {
+				return nil, fmt.Errorf("host not allowed: %s, expected: %s", hostname, baseHostname)
+			}
+
+			// RFC 3986 resolution. Handler absolute and relative
+			u = base.ResolveReference(full)
+
+			if u.Scheme != base.Scheme {
+				return nil, fmt.Errorf("scheme mismatch: %s, expected: %s", u.Scheme, c.baseURL.Scheme)
+			}
+
+			if u.Port() != "" && u.Port() != base.Port() {
+				return nil, fmt.Errorf("port not allowed: %s, expected %s", u.Port(), base.Port())
+			}
+
+			if u.User != nil {
+				return nil, fmt.Errorf("userinfo not allowed")
+			}
+			// u = full
+		} else {
+
+			if !strings.HasSuffix(base.Path, "/") {
+				base.Path += "/"
+			}
+			u = base.ResolveReference(&url.URL{Path: strings.TrimPrefix(path, "/")})
 		}
-		u = base.ResolveReference(&url.URL{Path: strings.TrimPrefix(path, "/")})
 	} else {
+		if !hasHostname(path) {
+			return nil, fmt.Errorf("invalid path as the base url is undefined: %s", path)
+		}
 		var err error
 		u, err = url.Parse(path)
 		if err != nil {
 			return nil, err
+		}
+
+		if c.hasTlsEnabled && u.Scheme != "https" {
+			return nil, fmt.Errorf("the path have to use https scheme")
 		}
 	}
 

@@ -34,3 +34,6 @@ bin.local/
 
 config.toml
 config.yaml
+
+*.zip
+*.gz

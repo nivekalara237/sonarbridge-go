@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"sonarbridge-go/internal/infra/utils"
 	"sonarbridge-go/pkg/httpclient"
 	"strings"
 	"time"
@@ -79,21 +78,21 @@ func (r *LocalRegistry) Resolve(ctx context.Context, name, versionConstraint str
 		return ArtifactRef{}, fmt.Errorf("local-registry: %s@%s: release %s has no checksums.txt asset", name, versionConstraint, catalog.Metadata.Name)
 	}
 	// vcsType := getVcsTypeByName(name)
-	checksums, err := r.downloadBytes(ctx, fmt.Sprintf("assets/binary/%s", utils.EncodeURIComponent(checksumAsset.Path)))
+	checksums, err := r.downloadBytes(ctx, fmt.Sprintf("%s", checksumAsset.Path))
 	if err != nil {
 		return ArtifactRef{}, fmt.Errorf("local-registry: %s@%s: fetch checksums: %w", name, versionConstraint, err)
 	}
 
-	archName := goarch
-	if goarch == "amd64" {
-		archName = "x86_64"
+	filename := asset.Name
+	if goarch == "amd64" && goos == "windows" {
+		filename += ".zip"
 	}
-	sum, err := extractChecksums(checksums, fmt.Sprintf("%s_%s_%s", asset.Name, goos, archName))
+	sum, err := extractChecksums(checksums, filename)
 	if err != nil {
 		return ArtifactRef{}, fmt.Errorf("local-registry: %s@%s: %w", name, versionConstraint, err)
 	}
 
-	metaBytes, err := r.downloadBytes(ctx, fmt.Sprintf("assets/binary/%s", utils.EncodeURIComponent(catalog.Metadata.Path)))
+	metaBytes, err := r.downloadBytes(ctx, catalog.Metadata.Path)
 	if err != nil {
 		return ArtifactRef{}, fmt.Errorf("local-registry: %s@%s: fetch metadata: %w", name, versionConstraint, err)
 	}
@@ -103,14 +102,12 @@ func (r *LocalRegistry) Resolve(ctx context.Context, name, versionConstraint str
 		return ArtifactRef{}, fmt.Errorf("local-registry: %s@%s: decoding metadata: %w", name, versionConstraint, err)
 	}
 
-	escapedUrl := fmt.Sprintf("assets/binary/%s", utils.EncodeURIComponent(asset.Path))
-
 	return ArtifactRef{
 		Name:        name,
 		Version:     metadata.Version,
 		OS:          goos,
 		Arch:        goarch,
-		DownloadURL: escapedUrl,
+		DownloadURL: asset.Path,
 		SHA256:      sum,
 	}, nil
 }
@@ -162,7 +159,7 @@ func extractChecksums(checksumsFiles []byte, filename string) (string, error) {
 		if len(fields) != 2 {
 			continue
 		}
-		if strings.ToLower(fields[1]) == filename {
+		if strings.ToLower(fields[1]) == strings.ToLower(filename) {
 			return fields[0], nil
 		}
 	}

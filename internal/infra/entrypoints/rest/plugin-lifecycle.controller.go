@@ -8,8 +8,10 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"slices"
 	"sonarbridge-go/internal/infra/entrypoints/dto"
 	"sonarbridge-go/internal/infra/entrypoints/rest/httpx"
+	"sonarbridge-go/internal/infra/entrypoints/rest/validation"
 	"sonarbridge-go/internal/plugin/lifecycle"
 	"sonarbridge-go/internal/plugin/manager"
 	"sort"
@@ -49,6 +51,7 @@ type PluginLifecycle interface {
 	Enable(name string) error
 	Disable(ctx context.Context, name string) error
 	List() []manager.Status
+	SetPluginEnv(pName string, env map[string]string)
 }
 
 var _ PluginLifecycle = (*manager.Manager)(nil)
@@ -108,10 +111,54 @@ func (c *PluginLifecycleController) handle(w http.ResponseWriter, r *http.Reques
 	if !httpx.RequireMethod(w, r, "POST") {
 		return
 	}
-	c.execute(w, r, op)
+
+	envMap := make(map[string]string, 3)
+
+	if slices.Contains([]pluginOp{PluginOpRestart, PluginOpEnable}, op) {
+		var bodyStruct struct {
+			BaseUrl      string `json:"base_url" validate:"required,url"`
+			PrivateToken string `json:"private_token" validate:"required"`
+			CaFile       string `json:"ca_file,omitempty"`
+			GhRepoName   string `json:"gh_repo_name,omitempty"`
+		}
+
+		dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxTransitionBodyBytes))
+		err := dec.Decode(&bodyStruct)
+		if err == nil {
+			var extra json.RawMessage
+			if e := dec.Decode(&extra); !errors.Is(e, io.EOF) {
+				err = errors.New("trailing data after the JSON body")
+			}
+		}
+		if err != nil {
+			if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
+				pluginWriteError(w, http.StatusRequestEntityTooLarge, "request_too_large", "request body is too large", "")
+				return
+			}
+			pluginWriteError(w, http.StatusBadRequest, "invalid_request", `body must be a JSON object like {"to":"READY", ...}`, "")
+			return
+		}
+
+		opValidator := validation.NewValidator[any](bodyStruct, "OpValidator", r.Context())
+		if err := opValidator.IsValidOrThrow(); err != nil {
+			pluginWriteError(w, http.StatusBadRequest,
+				"invalid_request", `body must be a JSON object like {"private_token": "<access-token>","base_url": "https://gitlab.example.com"}`, "")
+			return
+		}
+
+		name := pluginOf(r)
+		vcsType := getVcsType(name)
+		envMap = map[string]string{
+			fmt.Sprintf("%s_BASE_URL", strings.ToUpper(vcsType)): bodyStruct.BaseUrl,
+			fmt.Sprintf("%s_TOKEN", strings.ToUpper(vcsType)):    bodyStruct.PrivateToken,
+			fmt.Sprintf("%s_CA_FILE", strings.ToUpper(vcsType)):  bodyStruct.CaFile,
+		}
+	}
+
+	c.execute(w, r, op, envMap)
 }
 
-func (c *PluginLifecycleController) execute(w http.ResponseWriter, r *http.Request, op pluginOp) {
+func (c *PluginLifecycleController) execute(w http.ResponseWriter, r *http.Request, op pluginOp, envMap map[string]string) {
 	name := pluginOf(r)
 	log := c.logger().With("plugin-lifecycle-ctrl", name, "op", string(op), "remote", r.RemoteAddr)
 	if name == "" || len(name) > maxPluginNameLenght {
@@ -136,6 +183,7 @@ func (c *PluginLifecycleController) execute(w http.ResponseWriter, r *http.Reque
 		pluginWriteError(w, http.StatusNotFound, "plugin_not_found", "plugin not found", "")
 		return
 	}
+	c.mgr.SetPluginEnv(name, envMap)
 	changed, err := c.apply(ctx, op, before.State, name)
 	after, _ := c.status(name)
 	if err != nil {
@@ -256,14 +304,37 @@ func (c *PluginLifecycleController) EnableHandler(w http.ResponseWriter, req *ht
 	return nil
 }
 
+func getVcsType(name string) string {
+	n := strings.ToLower(name)
+	if strings.Contains(n, "gitlab") {
+		return "gitlab"
+	}
+	if strings.Contains(n, "github") {
+		return "github"
+	}
+	if strings.Contains(n, "gitea") {
+		return "gitea"
+	}
+	if strings.Contains(n, "bitbucket") {
+		return "bitbucket"
+	}
+
+	return n
+}
+
 func (c *PluginLifecycleController) TransitionHandler(w http.ResponseWriter, req *http.Request) error {
 	if !httpx.RequireMethod(w, req, http.MethodPost) {
 		return nil
 	}
 
 	var bodyStruct struct {
-		To string `json:"to"`
+		To           string `json:"to" validate:"required"`
+		BaseUrl      string `json:"base_url" validate:"required,url"`
+		PrivateToken string `json:"private_token" validate:"required"`
+		CaFile       string `json:"ca_file,omitempty"`
+		// GhOwner   string `json:"gh_repo_name,omitempty"`
 	}
+
 	dec := json.NewDecoder(http.MaxBytesReader(w, req.Body, maxTransitionBodyBytes))
 	err := dec.Decode(&bodyStruct)
 	if err == nil {
@@ -277,7 +348,14 @@ func (c *PluginLifecycleController) TransitionHandler(w http.ResponseWriter, req
 			pluginWriteError(w, http.StatusRequestEntityTooLarge, "request_too_large", "request body is too large", "")
 			return err
 		}
-		pluginWriteError(w, http.StatusBadRequest, "invalid_request", `body must be a JSON object like {"to":"READY"}`, "")
+		pluginWriteError(w, http.StatusBadRequest, "invalid_request", `body must be a JSON object like {"to":"READY", ...}`, "")
+		return err
+	}
+
+	transitionValidator := validation.NewValidator[any](bodyStruct, "TransitionValidator", req.Context())
+	if err := transitionValidator.IsValidOrThrow(); err != nil {
+		pluginWriteError(w, http.StatusBadRequest,
+			"invalid_request", `body must be a JSON object like {"to":"READY", "private_token": "<access-token>","base_url": "https://gitlab.example.com"}`, "")
 		return err
 	}
 
@@ -287,8 +365,19 @@ func (c *PluginLifecycleController) TransitionHandler(w http.ResponseWriter, req
 			`"to" must be one of `+pluginAllowedTargets(), "")
 		return nil
 	}
+	name := pluginOf(req)
+	vcsType := getVcsType(name)
+	envMap := map[string]string{
+		fmt.Sprintf("%s_BASE_URL", vcsType): bodyStruct.BaseUrl,
+		fmt.Sprintf("%s_TOKEN", vcsType):    bodyStruct.PrivateToken,
+		fmt.Sprintf("%s_CA_FILE", vcsType):  bodyStruct.CaFile,
+	}
 
-	c.execute(w, req, op)
+	if vcsType == "github" || vcsType == "gitea" {
+		// envMap[fmt.Sprintf("%s_OWNER", vcsType)] = bodyStruct.GhRepoName
+	}
+
+	c.execute(w, req, op, envMap)
 	return nil
 }
 

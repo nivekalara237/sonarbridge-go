@@ -86,7 +86,8 @@ func (a *App) RunPluginProvisioner(provisioned chan struct{}, pCtx context.Conte
 			Name:    p.BinaryName,
 			Version: utils.Ternary[string](p.Version == "", "latest", p.Version),
 		})
-		a.PluginManager.PluginEnv[p.BinaryName] = env
+		// a.PluginManager.PluginEnv[p.BinaryName] = env
+		a.PluginManager.SetPluginEnv(p.BinaryName, env)
 	}
 
 	go func() {

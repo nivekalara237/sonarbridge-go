@@ -48,8 +48,6 @@ func (c *VcsClient) CreatePullrequestComment(ctx context.Context, prComment doma
 		return nil, fmt.Errorf("vcs: %s: create comment: %w", provider, err)
 	}
 
-	// debug.PrintLn(resp.Data, err)
-
 	if resp.Metadata != nil && !isSuccessStatus(resp.Metadata.GetStatus()) {
 		return nil, fmt.Errorf("vcs: %s: %s: upstream status %d: %s", provider, "create comment", resp.Metadata.GetStatus(), errMsg(resp.Metadata))
 	}
