@@ -403,6 +403,11 @@ func (m *Manager) Restart(ctx context.Context, name string) error {
 	return m.Start(ctx, name)
 }
 
+func (m *Manager) SetPluginEnv(pName string, env map[string]string) {
+	m.PluginEnv[pName] = env
+	m.instances[pName].env = env
+}
+
 // Dispense returns the client-side stub for a business service (see plugin.*Key constants in cli-bridge-plugin-sdk)
 // on an already READY plugin. Ex: CommentAndNoteService once Handshake's
 // Capabilities confirmed the plugin declares it. The caller is expected to have checked capabilities

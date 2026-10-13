@@ -18,6 +18,8 @@ env:
   - VCS_PATH=./plugins/vcs/gitlab
   - VCS_PKG=sonarbridge-go/plugins/vcs
   - GITLAB_PROTOCOL_VERSION="1"
+  - ARTIFACTS_TOKEN=342d33de8aa2f54abd590c5c0c0f0986ef0b37003bb1e588960ecb2d0543c7e7
+  - REGISTRY_URL=http://localhost:8077
 retry:
   attempts: 2
   delay: 5s
@@ -67,7 +69,7 @@ archives:
   # archiving and just uploads the raw binary as the release asset.
   - formats: [binary]
     id: vcs-gitlab-plugin-archive
-#    wrap_in_directory: true
+    #    wrap_in_directory: true
     name_template: >-
       {{ .ProjectName }}_
       {{- title .Os }}_
@@ -79,6 +81,37 @@ archives:
     format_overrides:
       - goos: windows
         formats: [zip]
+
+#.uploads:
+#  - name: local
+#    #username: bridge
+#    #password: br1d93
+#    checksum_header: "X-Checksum-Sha256"
+#    meta: true
+#    checksum: true
+#    signature: true
+#    mode: binary
+#    method: PUT
+#    target: "http://localhost:8077/gitlab/artifacts/{{ .Version }}/files" #/{{ .ProjectName }}
+#    custom_headers:
+#      Authorization: "Bearer {{ .Env.ARTIFACTS_TOKEN }}"
+#      X-OS: "{{ .Os }} "
+#      X-ARCH: "{{ .Arch }} "
+
+publishers:
+  - name: "local-push"
+    meta: true
+    checksum: true
+    signature: true
+    disable: false
+    env:
+      - PPATH="{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ targetVariant . }}"
+      - LOCAL_REGISTRY_UPLOAD_TOKEN="{{ .Env.ARTIFACTS_TOKEN }}"
+      - LOCAL_REGISTRY_URL="{{ .Env.REGISTRY_URL }}"
+    #cmdx: custom-publisher -product={{ .ProjectName }} -version={{ .Version }} {{ .ArtifactPath }}
+    cmd: >-
+      ./upload.sh --latest --version={{ .Version }} gitlab bin.local/assets/binaries/gitlab/artifacts.json
+
 
 changelog:
   disable: true
